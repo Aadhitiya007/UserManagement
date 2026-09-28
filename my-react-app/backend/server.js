@@ -20,6 +20,7 @@ dns.setDefaultResultOrder("ipv4first");
 const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const cartRoutes = require("./routes/cartRoutes");
+const productRoutes = require("./routes/productRoutes");
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use((req, res, next) => {
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/products", productRoutes);
 app.use("/uploads", express.static("uploads"));
 
 app.use((err, req, res, next) => {

@@ -1,91 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { logout, getToken } from "../services/authService";
-
-const SAMPLE_PRODUCTS = [
-  {
-    id: 1,
-    name: "Wireless ANC Headphones",
-    category: "Electronics",
-    price: 2999,
-    originalPrice: 5999,
-    discount: "50% OFF",
-    rating: 4.5,
-    reviews: 1240,
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300",
-    tag: "Bestseller"
-  },
-  {
-    id: 2,
-    name: "Smart Fitness Watch v2",
-    category: "Wearables",
-    price: 1999,
-    originalPrice: 3999,
-    discount: "50% OFF",
-    rating: 4.3,
-    reviews: 850,
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300",
-    tag: "Free Delivery"
-  },
-  {
-    id: 3,
-    name: "RGB Gaming Mouse",
-    category: "Electronics",
-    price: 899,
-    originalPrice: 1499,
-    discount: "40% OFF",
-    rating: 4.6,
-    reviews: 2100,
-    image: "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=300",
-    tag: "Top Deal"
-  },
-  {
-    id: 4,
-    name: "Mechanical Keyboard",
-    category: "Electronics",
-    price: 3499,
-    originalPrice: 4999,
-    discount: "30% OFF",
-    rating: 4.7,
-    reviews: 1540,
-    image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=300",
-    tag: "Limited Stock"
-  },
-  {
-    id: 5,
-    name: "Smartphone 128GB",
-    category: "Mobiles",
-    price: 14999,
-    originalPrice: 18999,
-    discount: "21% OFF",
-    rating: 4.4,
-    reviews: 3400,
-    image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=300",
-    tag: "Top Seller"
-  },
-  {
-    id: 6,
-    name: "Bluetooth Speaker 20W",
-    category: "Audio",
-    price: 1299,
-    originalPrice: 2499,
-    discount: "48% OFF",
-    rating: 4.2,
-    reviews: 980,
-    image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=300",
-    tag: "Free Delivery"
-  }
-];
 
 const CATEGORIES = ["All", "Electronics", "Mobiles", "Wearables", "Audio"];
 
 function Products() {
   const navigate = useNavigate();
-  const [products] = useState(SAMPLE_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [cart, setCart] = useState([]);
   const [notification, setNotification] = useState(null);
+
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        const res = await fetch("http://localhost:5000/api/products");
+        const data = await res.json();
+
+        // Map MongoDB _id to id so cart and UI components work seamlessly
+        const formattedData = data.map((item) => ({
+          ...item,
+          id: item._id || item.id
+        }));
+
+        setProducts(formattedData);
+      } catch (err) {
+        console.error("Error fetching products:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchProducts();
+  }, []);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
