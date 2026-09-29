@@ -34,7 +34,13 @@ function Products() {
     }
 
     fetchProducts();
+    const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
+    setCart(savedCart);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("userCart", JSON.stringify(cart));
+  }, [cart]);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -215,9 +221,13 @@ function Products() {
       <div className="shop-header">
         <h1>🛒 E-Shop</h1>
         <div>
-          <span className="cart-info">
-            Cart: {totalCartCount} item(s)
-          </span>
+          <button
+            onClick={() => navigate("/cart")}
+            className="btn-page"
+            style={{ marginRight: "10px", cursor: "pointer" }}
+          >
+            🛒 View Cart ({totalCartCount})
+          </button>
           <button onClick={handleLogout} className="btn-delete btn-logout">
             Logout
           </button>

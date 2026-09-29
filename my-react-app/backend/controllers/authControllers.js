@@ -10,14 +10,14 @@ const adminLogin = async (req, res) => {
             return res.status(400).json({ message: "Email and password are required" });
         }
 
-        // 1. Fetch User / Admin directly from MongoDB by email
+        //  Fetch user by email
         const user = await User.findOne({ email: email.toLowerCase().trim() });
 
         if (!user) {
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        // 2. Validate password stored directly in MongoDB using bcrypt
+        // Validate password using bcrypt
         let isMatch = false;
         if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
             isMatch = await bcrypt.compare(password, user.password);
