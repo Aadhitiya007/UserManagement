@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const rateLimit = require("express-rate-limit");
-const verifyToken = require("../middleware/authMiddleware");
+const { verifyToken } = require("../middleware/authMiddleware");
 const { adminLogin, userRegister, userLogout } = require("../controllers/authControllers");
 
 // Protect login and signup endpoints against brute-force password guessing

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import UserTable from "./pages/UserTable";
 import UserForm from "./pages/UserForm";
 import Products from "./pages/Products";
+import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/cart";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -41,28 +42,15 @@ function App() {
           }
         />
 
-        {/* User Only Route */}
-        <Route
-          path="/products"
-          element={
-            <ProtectedRoute allowedRoles={["user"]}>
-              <Products />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/cart"
-          element={
-            <ProtectedRoute allowedRoles={["user"]}>
-              <Cart />
-            </ProtectedRoute>
-          }
-        />
+        {/* Public Store & Cart Routes */}
+        <Route path="/products" element={<Products />} />
+        <Route path="/products/:id" element={<ProductDetail />} />
+        <Route path="/cart" element={<Cart />} />
 
         {/* Fallback */}
         <Route
           path="*"
-          element={<Navigate to="/login" replace />}
+          element={<Navigate to="/products" replace />}
         />
       </Routes>
     </BrowserRouter>

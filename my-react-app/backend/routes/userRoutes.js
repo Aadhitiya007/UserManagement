@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require("../middleware/upload");
-const verifyToken = require("../middleware/authMiddleware");
+const { verifyToken } = require("../middleware/authMiddleware");
 const { requireAdmin } = require("../middleware/roleMiddleware");
 
 const {

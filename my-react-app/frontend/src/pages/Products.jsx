@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { logout, getToken } from "../services/authService";
+import { logout, getToken, isAuthenticated, getUserRole } from "../services/authService";
 
 const CATEGORIES = ["All", "Electronics", "Mobiles", "Wearables", "Audio"];
 
@@ -10,7 +10,14 @@ function Products() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
+      return Array.isArray(savedCart) ? savedCart : [];
+    } catch {
+      return [];
+    }
+  });
   const [notification, setNotification] = useState(null);
 
   useEffect(() => {
@@ -34,8 +41,6 @@ function Products() {
     }
 
     fetchProducts();
-    const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
-    setCart(savedCart);
   }, []);
 
   useEffect(() => {
@@ -52,43 +57,34 @@ function Products() {
     const token = getToken();
 
     try {
-      const res = await fetch("http://localhost:5000/api/cart/add", {
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      await fetch("http://localhost:5000/api/cart/add", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify({
           productId: product.id,
           name: product.name,
           price: product.price
         })
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error("%c❌ [BACKEND ERROR] Cart Add Failed:", "color: #ef4444; font-weight: bold;", data);
-        showNotification("error", data.message || "Failed to add product to backend cart.");
-        return;
-      }
-
-      console.log("%c✅ [BACKEND RESPONSE 200 OK] Item added:", "color: #10b981; font-weight: bold;", data);
-      showNotification("success", `Added "${product.name}" to cart!`);
-
-      setCart((prev) => {
-        const existing = prev.find((item) => item.id === product.id);
-        if (existing) {
-          return prev.map((item) =>
-            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-          );
-        }
-        return [...prev, { ...product, quantity: 1 }];
-      });
     } catch (err) {
-      console.error("%c❌ [NETWORK ERROR] Could not reach backend server:", "color: #ef4444; font-weight: bold;", err);
-      showNotification("error", "Network error: Could not connect to backend server.");
+      console.warn("Backend cart add notice:", err);
     }
+
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+    showNotification("success", `Added "${product.name}" to cart!`);
   }
 
   async function updateQuantity(id, amount) {
@@ -100,34 +96,32 @@ function Products() {
     const token = getToken();
 
     try {
-      const res = await fetch("http://localhost:5000/api/cart/update", {
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      await fetch("http://localhost:5000/api/cart/update", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify({
           productId: id,
           change: amount,
           newQuantity: newQty
         })
       });
-
-      const data = await res.json();
-      console.log("%c✅ [BACKEND RESPONSE 200 OK] Quantity updated:", "color: #10b981; font-weight: bold;", data);
-
-      setCart((prev) =>
-        prev
-          .map((item) =>
-            item.id === id ? { ...item, quantity: item.quantity + amount } : item
-          )
-          .filter((item) => item.quantity > 0)
-      );
-      showNotification("success", `Updated quantity for "${item.name}".`);
     } catch (err) {
-      console.error("%c❌ [NETWORK ERROR] Update quantity failed:", "color: #ef4444; font-weight: bold;", err);
-      showNotification("error", "Network error updating quantity.");
+      console.warn("Backend cart update notice:", err);
     }
+
+    setCart((prev) =>
+      prev
+        .map((item) =>
+          item.id === id ? { ...item, quantity: item.quantity + amount } : item
+        )
+        .filter((item) => item.quantity > 0)
+    );
+    showNotification("success", `Updated quantity for "${item.name}".`);
   }
 
   async function removeFromCart(id) {
@@ -136,25 +130,37 @@ function Products() {
     const token = getToken();
 
     try {
-      const res = await fetch(`http://localhost:5000/api/cart/remove/${id}`, {
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      await fetch(`http://localhost:5000/api/cart/remove/${id}`, {
         method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
+        headers
       });
-
-      const data = await res.json();
-      console.log("%c✅ [BACKEND RESPONSE 200 OK] Item removed:", "color: #10b981; font-weight: bold;", data);
-
-      setCart((prev) => prev.filter((item) => item.id !== id));
-      showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
     } catch (err) {
-      console.error("%c❌ [NETWORK ERROR] Remove item failed:", "color: #ef4444; font-weight: bold;", err);
-      showNotification("error", "Network error removing item.");
+      console.warn("Backend cart remove notice:", err);
     }
+
+    setCart((prev) => prev.filter((item) => item.id !== id));
+    showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
   }
 
   async function handleOrder() {
+    if (!isAuthenticated()) {
+      showNotification("error", "Please login or sign up to complete your purchase.");
+      setTimeout(() => {
+        navigate("/login", {
+          state: {
+            from: "/cart",
+            message: "Please log in or create an account to complete your purchase."
+          }
+        });
+      }, 1200);
+      return;
+    }
+
     const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     console.log("%c💳 [FRONTEND ACTION] Place Order Clicked. Cart:", "color: #8b5cf6; font-weight: bold;", cart);
     const token = getToken();
@@ -175,6 +181,18 @@ function Products() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          showNotification("error", "Session expired. Please log in to complete your purchase.");
+          setTimeout(() => {
+            navigate("/login", {
+              state: {
+                from: "/cart",
+                message: "Please log in to complete your purchase."
+              }
+            });
+          }, 1200);
+          return;
+        }
         console.error("%c❌ [BACKEND ERROR] Checkout failed:", "color: #ef4444; font-weight: bold;", data);
         showNotification("error", data.message || "Checkout failed.");
         return;
@@ -220,17 +238,44 @@ function Products() {
     <div className="shop-container">
       <div className="shop-header">
         <h1>🛒 E-Shop</h1>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button
             onClick={() => navigate("/cart")}
             className="btn-page"
-            style={{ marginRight: "10px", cursor: "pointer" }}
+            style={{ cursor: "pointer" }}
           >
             🛒 View Cart ({totalCartCount})
           </button>
-          <button onClick={handleLogout} className="btn-delete btn-logout">
-            Logout
-          </button>
+          {isAuthenticated() ? (
+            <>
+              {getUserRole() === "admin" && (
+                <button
+                  onClick={() => navigate("/users")}
+                  className="btn-edit"
+                >
+                  Admin Dashboard
+                </button>
+              )}
+              <button onClick={handleLogout} className="btn-delete btn-logout">
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => navigate("/login")}
+                className="btn-add"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => navigate("/signup")}
+                className="btn-edit"
+              >
+                Sign Up
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -285,27 +330,43 @@ function Products() {
           <p className="empty-message">No products match your search or category filter.</p>
         ) : (
           filteredProducts.map((p) => (
-            <div key={p.id} className="product-card">
+            <div
+              key={p.id}
+              className="product-card clickable-product-card"
+              onClick={() => navigate(`/products/${p.id}`)}
+              style={{ cursor: "pointer" }}
+            >
               <img
-                src={p.image}
+                src={p.image || "https://via.placeholder.com/300x150?text=Product+Image"}
                 alt={p.name}
-                style={{ width: "100%", height: "140px", objectFit: "cover", borderRadius: "6px", marginBottom: "10px" }}
+                style={{ width: "100%", height: "150px", objectFit: "cover", borderRadius: "6px", marginBottom: "10px" }}
               />
               <h3>{p.name}</h3>
               <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                ⭐ {p.rating} ({p.reviews.toLocaleString()} reviews) • {p.tag}
+                ⭐ {p.rating || 4.5} ({p.reviews ? p.reviews.toLocaleString() : '1,250'} reviews) {p.tag ? `• ${p.tag}` : ''}
               </p>
               <div style={{ marginBottom: "12px" }}>
-                <span className="product-price">₹{p.price.toLocaleString()}</span>{" "}
-                <span style={{ textDecoration: "line-through", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                  ₹{p.originalPrice.toLocaleString()}
-                </span>{" "}
-                <span style={{ color: "#10b981", fontSize: "0.85rem", fontWeight: "bold" }}>
-                  {p.discount}
-                </span>
+                <span className="product-price">₹{p.price ? p.price.toLocaleString() : 0}</span>{" "}
+                {p.originalPrice && (
+                  <span style={{ textDecoration: "line-through", color: "var(--text-muted)", fontSize: "0.85rem", marginRight: "6px" }}>
+                    ₹{p.originalPrice.toLocaleString()}
+                  </span>
+                )}
+                {p.discount && (
+                  <span style={{ color: "#10b981", fontSize: "0.85rem", fontWeight: "bold" }}>
+                    {p.discount}
+                  </span>
+                )}
               </div>
-              <button onClick={() => addToCart(p)} className="btn-add btn-cart">
-                Add to Cart
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/products/${p.id}`);
+                }}
+                className="btn-page btn-view-detail"
+                style={{ width: "100%", fontWeight: "bold" }}
+              >
+                🔍 View Specs & Buy
               </button>
             </div>
           ))

@@ -1,5 +1,23 @@
 const mongoose = require("mongoose");
 
+const colorSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    color: { type: String, required: true }
+  },
+  { _id: false }
+);
+
+const variantSchema = new mongoose.Schema(
+  {
+    label: { type: String, required: true },
+    priceDiff: { type: Number, default: 0 },
+    status: { type: String, default: "in-stock" },
+    badge: { type: String }
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -10,7 +28,20 @@ const productSchema = new mongoose.Schema(
     rating: { type: Number, default: 4.5 },
     reviews: { type: Number, default: 0 },
     image: { type: String, required: true },
-    tag: { type: String }
+    tag: { type: String },
+    description: { type: String },
+    specs: {
+      display: { type: String },
+      processor: { type: String },
+      camera: { type: String },
+      battery: { type: String },
+      os: { type: String },
+      warranty: { type: String },
+      sound: { type: String },
+      connectivity: { type: String }
+    },
+    colors: [colorSchema],
+    variants: [variantSchema]
   },
   { timestamps: true }
 );

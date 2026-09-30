@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { logout, getToken } from "../services/authService";
+import { logout, getToken, isAuthenticated, getUserRole } from "../services/authService";
 
 function Cart() {
   const navigate = useNavigate();
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
+      return Array.isArray(savedCart) ? savedCart : [];
+    } catch {
+      return [];
+    }
+  });
   const [notification, setNotification] = useState(null);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 4000);
   };
-
-  // 1. READ: Load cart items from localStorage on mount
-  useEffect(() => {
-    const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
-    setCart(savedCart);
-  }, []);
 
   // Sync state changes to localStorage
   useEffect(() => {
@@ -32,32 +33,32 @@ function Cart() {
     const token = getToken();
 
     try {
-      const res = await fetch("http://localhost:5000/api/cart/update", {
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      await fetch("http://localhost:5000/api/cart/update", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify({
           productId,
           change,
           newQuantity
         })
       });
-
-      if (res.ok) {
-        setCart((prevCart) =>
-          prevCart
-            .map((item) =>
-              item.id === productId ? { ...item, quantity: newQuantity } : item
-            )
-            .filter((item) => item.quantity > 0)
-        );
-        showNotification("success", `Updated quantity for ${item.name}`);
-      }
     } catch (err) {
-      showNotification("error", "Network error updating item quantity.");
+      console.warn("Backend cart update notice:", err);
     }
+
+    setCart((prevCart) =>
+      prevCart
+        .map((item) =>
+          item.id === productId ? { ...item, quantity: newQuantity } : item
+        )
+        .filter((item) => item.quantity > 0)
+    );
+    showNotification("success", `Updated quantity for ${item.name}`);
   }
 
   // 3. DELETE: Remove item from cart
@@ -66,25 +67,39 @@ function Cart() {
     const token = getToken();
 
     try {
-      const res = await fetch(`http://localhost:5000/api/cart/remove/${productId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (res.ok) {
-        setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
-        showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
       }
+
+      await fetch(`http://localhost:5000/api/cart/remove/${productId}`, {
+        method: "DELETE",
+        headers
+      });
     } catch (err) {
-      showNotification("error", "Network error removing item from cart.");
+      console.warn("Backend cart remove notice:", err);
     }
+
+    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
+    showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
   }
 
   // 4. CREATE / CHECKOUT: Place order
   async function handleCheckout() {
     if (cart.length === 0) return;
+
+    if (!isAuthenticated()) {
+      showNotification("error", "Please login or sign up to complete your purchase.");
+      setTimeout(() => {
+        navigate("/login", {
+          state: {
+            from: "/cart",
+            message: "Please log in or create an account to complete your purchase."
+          }
+        });
+      }, 1200);
+      return;
+    }
 
     const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const token = getToken();
@@ -100,6 +115,19 @@ function Cart() {
       });
 
       const data = await res.json();
+
+      if (res.status === 401 || res.status === 403) {
+        showNotification("error", "Session expired. Redirecting to login...");
+        setTimeout(() => {
+          navigate("/login", {
+            state: {
+              from: "/cart",
+              message: "Please log in to complete your purchase."
+            }
+          });
+        }, 1500);
+        return;
+      }
 
       if (res.ok) {
         showNotification("success", `🎉 Order ${data.orderId} placed for ₹${totalPrice.toLocaleString()}!`);
@@ -129,9 +157,27 @@ function Cart() {
           <button className="btn-page" onClick={() => navigate("/products")}>
             ← Back to Products
           </button>
-          <button className="btn-delete btn-logout" onClick={handleLogout}>
-            Logout
-          </button>
+          {isAuthenticated() ? (
+            <>
+              {getUserRole() === "admin" && (
+                <button className="btn-edit" onClick={() => navigate("/users")}>
+                  Admin Dashboard
+                </button>
+              )}
+              <button className="btn-delete btn-logout" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn-add" onClick={() => navigate("/login")}>
+                Login
+              </button>
+              <button className="btn-edit" onClick={() => navigate("/signup")}>
+                Sign Up
+              </button>
+            </>
+          )}
         </div>
       </div>
 

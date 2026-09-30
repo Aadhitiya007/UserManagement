@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { registerUser } from "../services/authService";
+import { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { registerUser, isAuthenticated, getUserRole } from "../services/authService";
 
 const COUNTRIES = [
   "India", "USA", "UK", "Canada", "Australia", "Germany", "France", "Japan", "China", 
@@ -25,6 +25,19 @@ function Signup() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const noticeMessage = location.state?.message;
+
+  useEffect(() => {
+    if (isAuthenticated()) {
+      const role = getUserRole();
+      if (role === "admin") {
+        navigate("/users", { replace: true });
+      } else {
+        navigate("/products", { replace: true });
+      }
+    }
+  }, [navigate]);
 
   function handleChange(e) {
     setFormData((prev) => ({
@@ -41,10 +54,11 @@ function Signup() {
     try {
       const data = await registerUser(formData);
 
-      if (data.user.role === "user") {
-        navigate("/products");
+      if (data.user?.role === "admin") {
+        navigate("/users", { replace: true });
       } else {
-        navigate("/users");
+        const from = location.state?.from || "/products";
+        navigate(from, { replace: true });
       }
     } catch (err) {
       setError(err.message);
@@ -57,8 +71,25 @@ function Signup() {
     <div className="auth-container">
       <h2>📝 Create a User Account</h2>
       <p className="auth-subtitle">
-        Sign up with your custom password to access the products store.
+        Sign up to start shopping and manage your orders.
       </p>
+
+      {noticeMessage && (
+        <div
+          style={{
+            padding: "10px 14px",
+            marginBottom: "16px",
+            borderRadius: "6px",
+            backgroundColor: "#eff6ff",
+            color: "#1d4ed8",
+            border: "1px solid #bfdbfe",
+            fontSize: "0.9rem",
+            fontWeight: "500"
+          }}
+        >
+          {noticeMessage}
+        </div>
+      )}
 
       {error && <div className="error-message">{error}</div>}
 
@@ -150,10 +181,11 @@ function Signup() {
       </form>
 
       <p className="auth-footer">
-        Already have an account? <Link to="/login">Log In</Link>
+        Already have an account? <Link to="/login" state={location.state}>Log In</Link>
       </p>
     </div>
   );
 }
 
 export default Signup;
+

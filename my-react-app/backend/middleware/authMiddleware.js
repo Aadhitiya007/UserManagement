@@ -19,5 +19,23 @@ const verifyToken = (req, res, next) => {
     }
 };
 
-module.exports = verifyToken;
+const optionalVerifyToken = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+        const token = authHeader.split(" ")[1];
+        const JWT_SECRET = process.env.JWT_SECRET;
+
+        try {
+            const decodedPayload = jwt.verify(token, JWT_SECRET);
+            req.user = decodedPayload;
+        } catch (err) {
+            // Optional auth, proceed as guest if token invalid
+        }
+    }
+    next();
+};
+
+module.exports = { verifyToken, optionalVerifyToken };
+
 
