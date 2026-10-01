@@ -4,7 +4,7 @@ import { logout, getToken, isAuthenticated, getUserRole } from "../services/auth
 
 function formatKey(key) {
   if (!key) return "";
-  // Convert camelCase or snake_case to readable Title Case
+ 
   return key
     .replace(/([A-Z])/g, " $1")
     .replace(/[_-]/g, " ")
@@ -276,14 +276,14 @@ function ProductDetail() {
         </div>
       )}
 
-      {/* Breadcrumbs */}
+      
       <div className="detail-breadcrumb">
         <span>Home</span> / <span>{product.category || "Store"}</span> / <span className="active">{product.name}</span>
       </div>
 
-      {/* Detail Grid */}
+      
       <div className="detail-grid">
-        {/* Left Column: Image & Feature Badges */}
+        
         <div className="detail-left">
           <div className="detail-image-wrapper">
             <img

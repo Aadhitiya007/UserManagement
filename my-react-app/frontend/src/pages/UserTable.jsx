@@ -149,9 +149,7 @@ function UserTable() {
           >
             Delete All
           </button>
-          <button className="btn-page" onClick={() => navigate("/products")}>
-            🛒 View Store
-          </button>
+          
           <button className="btn-add" onClick={() => navigate("/users/add")}>
             Add New User
           </button>

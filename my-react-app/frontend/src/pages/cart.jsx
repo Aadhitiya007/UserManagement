@@ -19,12 +19,12 @@ function Cart() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Sync state changes to localStorage
+  
   useEffect(() => {
     localStorage.setItem("userCart", JSON.stringify(cart));
   }, [cart]);
 
-  // 2. UPDATE: Change item quantity (+1 or -1)
+  
   async function updateQuantity(productId, change) {
     const item = cart.find((i) => i.id === productId);
     if (!item) return;
@@ -61,7 +61,7 @@ function Cart() {
     showNotification("success", `Updated quantity for ${item.name}`);
   }
 
-  // 3. DELETE: Remove item from cart
+
   async function removeFromCart(productId) {
     const item = cart.find((i) => i.id === productId);
     const token = getToken();
@@ -84,7 +84,7 @@ function Cart() {
     showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
   }
 
-  // 4. CREATE / CHECKOUT: Place order
+  
   async function handleCheckout() {
     if (cart.length === 0) return;
 
@@ -150,7 +150,7 @@ function Cart() {
 
   return (
     <div className="shop-container">
-      {/* Header */}
+     
       <div className="shop-header">
         <h1>🛒 Shopping Cart</h1>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -181,7 +181,7 @@ function Cart() {
         </div>
       </div>
 
-      {/* Notification Toast */}
+      
       {notification && (
         <div
           style={{
@@ -207,7 +207,7 @@ function Cart() {
         </div>
       )}
 
-      {/* Cart Items List */}
+      
       {cart.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0" }}>
           <h2>Your cart is empty 🛍️</h2>

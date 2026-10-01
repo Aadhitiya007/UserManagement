@@ -16,7 +16,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Admin Only Routes */}
+       
         <Route
           path="/users"
           element={
@@ -42,12 +42,12 @@ function App() {
           }
         />
 
-        {/* Public Store & Cart Routes */}
+        
         <Route path="/products" element={<Products />} />
         <Route path="/products/:id" element={<ProductDetail />} />
         <Route path="/cart" element={<Cart />} />
 
-        {/* Fallback */}
+        
         <Route
           path="*"
           element={<Navigate to="/products" replace />}

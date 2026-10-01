@@ -12,7 +12,7 @@ const verifyToken = (req, res, next) => {
 
     try {
         const decodedPayload = jwt.verify(token, JWT_SECRET);
-        req.user = decodedPayload; // Attach { id, email, role } to request
+        req.user = decodedPayload; 
         next();
     } catch (err) {
         return res.status(403).json({ message: "Invalid or expired token." });
@@ -30,7 +30,7 @@ const optionalVerifyToken = (req, res, next) => {
             const decodedPayload = jwt.verify(token, JWT_SECRET);
             req.user = decodedPayload;
         } catch (err) {
-            // Optional auth, proceed as guest if token invalid
+            
         }
     }
     next();

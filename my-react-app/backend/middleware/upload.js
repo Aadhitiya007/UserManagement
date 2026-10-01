@@ -2,7 +2,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// Ensure uploads folder exists
+
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -17,7 +17,7 @@ const storage = multer.diskStorage({
   }
 });
 
-// File validation filter to restrict file uploads
+
 const fileFilter = (req, file, cb) => {
   const allowedExtensions = /jpeg|jpg|png|webp|csv|json|pdf/;
   const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
@@ -32,7 +32,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // Max 5MB file size limit
+  limits: { fileSize: 5 * 1024 * 1024 } 
 });
 
 module.exports = upload;

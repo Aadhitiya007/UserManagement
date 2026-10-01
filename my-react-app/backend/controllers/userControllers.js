@@ -26,18 +26,18 @@ function parsePdfContent(text) {
     if (!text || !text.trim()) return users;
     const trimmed = text.trim();
     
-    // Attempt 1: Check if text contains a JSON array
+    
     const jsonMatch = trimmed.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (jsonMatch) {
         try {
             const parsed = JSON.parse(jsonMatch[0]);
             if (Array.isArray(parsed)) return parsed;
         } catch (e) {
-            // Fall through if JSON parsing fails
+            
         }
     }
 
-    // Attempt 2: CSV format inside PDF
+    
     const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length > 0 && lines[0].toLowerCase().includes('name') && lines[0].toLowerCase().includes('email')) {
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
@@ -56,7 +56,7 @@ function parsePdfContent(text) {
         if (users.length > 0) return users;
     }
 
-    // Attempt 3: Key-Value pairs line by line
+    
     let currentUser = {};
     for (const line of lines) {
         const nameMatch = line.match(/(?:Name|Full\s*Name)\s*:\s*(.+)/i);
@@ -163,7 +163,7 @@ const uploadUsersFromFile = async (req, res) => {
             return res.status(400).json({ message: "Unsupported file type. Please upload a JSON, CSV, or PDF file." });
         }
 
-        // Validate required fields (at minimum: name and email)
+        
         const usersToInsert = rawRecords.filter(user => {
             return user && typeof user === 'object' &&
                    user.name && String(user.name).trim() !== '' &&
@@ -188,7 +188,7 @@ const uploadUsersFromFile = async (req, res) => {
             message: error.message || "Failed to process user data file"
         });
     } finally {
-        // Safe Cleanup: Always delete the temporary uploaded file
+      
         if (filePath && fs.existsSync(filePath)) {
             try {
                 fs.unlinkSync(filePath);

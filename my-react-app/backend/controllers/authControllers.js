@@ -10,14 +10,14 @@ const adminLogin = async (req, res) => {
             return res.status(400).json({ message: "Email and password are required" });
         }
 
-        //  Fetch user by email
+        
         const user = await User.findOne({ email: email.toLowerCase().trim() });
 
         if (!user) {
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        // Validate password using bcrypt
+       
         let isMatch = false;
         if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
             isMatch = await bcrypt.compare(password, user.password);
@@ -31,7 +31,7 @@ const adminLogin = async (req, res) => {
 
         const JWT_SECRET = process.env.JWT_SECRET;
 
-        // 3. Generate JWT containing real MongoDB _id, email, and role
+        
         const payload = {
             id: user._id,
             email: user.email,
