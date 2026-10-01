@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { logout, getToken, isAuthenticated, getUserRole } from "../services/authService";
+import { getToken, isAuthenticated, getUserRole } from "../services/authService";
+import { useCart } from "../context/CartContext";
 
 const CATEGORIES = ["All", "Electronics", "Mobiles", "Wearables", "Audio"];
 
@@ -10,23 +11,24 @@ function Products() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [cart, setCart] = useState(() => {
-    try {
-      const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
-      return Array.isArray(savedCart) ? savedCart : [];
-    } catch {
-      return [];
-    }
-  });
-  const [notification, setNotification] = useState(null);
+
+  const {
+    cart,
+    setCart,
+    addToCart,
+    updateQuantity,
+    removeFromCart,
+    performLogout,
+    notification,
+    setNotification,
+    showNotification
+  } = useCart();
 
   useEffect(() => {
     async function fetchProducts() {
       try {
         const res = await fetch("http://localhost:5000/api/products");
         const data = await res.json();
-
-        // Map MongoDB _id to id so cart and UI components work seamlessly
         const formattedData = data.map((item) => ({
           ...item,
           id: item._id || item.id
@@ -43,110 +45,6 @@ function Products() {
     fetchProducts();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("userCart", JSON.stringify(cart));
-  }, [cart]);
-
-  const showNotification = (type, message) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
-  async function addToCart(product) {
-    console.log("%c🛒 [FRONTEND ACTION] Add to Cart Clicked:", "color: #3b82f6; font-weight: bold;", product);
-    const token = getToken();
-
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      await fetch("http://localhost:5000/api/cart/add", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId: product.id,
-          name: product.name,
-          price: product.price
-        })
-      });
-    } catch (err) {
-      console.warn("Backend cart add notice:", err);
-    }
-
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-    showNotification("success", `Added "${product.name}" to cart!`);
-  }
-
-  async function updateQuantity(id, amount) {
-    const item = cart.find((i) => i.id === id);
-    if (!item) return;
-
-    const newQty = item.quantity + amount;
-    console.log(`%c🔄 [FRONTEND ACTION] Update Quantity for "${item.name}": ${item.quantity} -> ${newQty}`, "color: #f59e0b; font-weight: bold;");
-    const token = getToken();
-
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      await fetch("http://localhost:5000/api/cart/update", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId: id,
-          change: amount,
-          newQuantity: newQty
-        })
-      });
-    } catch (err) {
-      console.warn("Backend cart update notice:", err);
-    }
-
-    setCart((prev) =>
-      prev
-        .map((item) =>
-          item.id === id ? { ...item, quantity: item.quantity + amount } : item
-        )
-        .filter((item) => item.quantity > 0)
-    );
-    showNotification("success", `Updated quantity for "${item.name}".`);
-  }
-
-  async function removeFromCart(id) {
-    const item = cart.find((i) => i.id === id);
-    console.log(`%c🗑️ [FRONTEND ACTION] Remove Item Clicked for ID ${id}`, "color: #ef4444; font-weight: bold;");
-    const token = getToken();
-
-    try {
-      const headers = {};
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      await fetch(`http://localhost:5000/api/cart/remove/${id}`, {
-        method: "DELETE",
-        headers
-      });
-    } catch (err) {
-      console.warn("Backend cart remove notice:", err);
-    }
-
-    setCart((prev) => prev.filter((item) => item.id !== id));
-    showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
-  }
-
   async function handleOrder() {
     if (!isAuthenticated()) {
       showNotification("error", "Please login or sign up to complete your purchase.");
@@ -162,7 +60,6 @@ function Products() {
     }
 
     const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    console.log("%c💳 [FRONTEND ACTION] Place Order Clicked. Cart:", "color: #8b5cf6; font-weight: bold;", cart);
     const token = getToken();
 
     try {
@@ -170,7 +67,7 @@ function Products() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
           items: cart,
@@ -193,36 +90,27 @@ function Products() {
           }, 1200);
           return;
         }
-        console.error("%c❌ [BACKEND ERROR] Checkout failed:", "color: #ef4444; font-weight: bold;", data);
         showNotification("error", data.message || "Checkout failed.");
         return;
       }
 
-      console.log("%c🎉 [BACKEND RESPONSE 201 CREATED] Order Placed Successfully:", "color: #10b981; font-size: 14px; font-weight: bold;", data);
       showNotification("success", `🎉 Order ${data.orderId} placed for ₹${totalPrice.toLocaleString()}!`);
       setCart([]);
     } catch (err) {
-      console.error("%c❌ [NETWORK ERROR] Order placement failed:", "color: #ef4444; font-weight: bold;", err);
       showNotification("error", "Network error: Failed to place order.");
     }
   }
 
   function handleCategoryChange(cat) {
-    console.log(`%c🏷️ [FRONTEND ACTION] Category Filter Changed: "${cat}"`, "color: #06b6d4; font-weight: bold;");
     setSelectedCategory(cat);
   }
 
   function handleSearchChange(e) {
-    const val = e.target.value;
-    console.log(`%c🔎 [FRONTEND ACTION] Search Input Changed: "${val}"`, "color: #64748b;");
-    setSearch(val);
+    setSearch(e.target.value);
   }
 
   async function handleLogout() {
-    console.log("%c🚪 [FRONTEND ACTION] Initiating Logout...", "color: #ef4444; font-weight: bold;");
-    await logout();
-    console.log("%c🚪 [FRONTEND ACTION] Logout complete. Redirecting to /login", "color: #ef4444; font-weight: bold;");
-    navigate("/login");
+    await performLogout(navigate, "/products");
   }
 
   const filteredProducts = products.filter((p) => {

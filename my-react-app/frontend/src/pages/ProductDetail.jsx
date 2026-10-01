@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { logout, getToken, isAuthenticated, getUserRole } from "../services/authService";
+import { isAuthenticated, getUserRole } from "../services/authService";
+import { useCart } from "../context/CartContext";
 
 function formatKey(key) {
   if (!key) return "";
- 
+
   return key
     .replace(/([A-Z])/g, " $1")
     .replace(/[_-]/g, " ")
@@ -21,15 +22,15 @@ function ProductDetail() {
   const [error, setError] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
-  const [cart, setCart] = useState(() => {
-    try {
-      const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
-      return Array.isArray(savedCart) ? savedCart : [];
-    } catch {
-      return [];
-    }
-  });
-  const [notification, setNotification] = useState(null);
+
+  const {
+    cart,
+    addToCart,
+    performLogout,
+    notification,
+    setNotification,
+    showNotification
+  } = useCart();
 
   useEffect(() => {
     async function fetchProduct() {
@@ -74,15 +75,6 @@ function ProductDetail() {
     }
   }, [id]);
 
-  useEffect(() => {
-    localStorage.setItem("userCart", JSON.stringify(cart));
-  }, [cart]);
-
-  const showNotification = (type, message) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
   async function handleAddToCart() {
     if (!product) return;
 
@@ -96,43 +88,10 @@ function ProductDetail() {
 
     const variantString = [variantLabel, colorName].filter(Boolean).join(" • ");
 
-    const itemToAdd = {
-      ...product,
+    await addToCart(product, {
       price: currentPrice,
-      selectedVariant: variantString
-    };
-
-    const token = getToken();
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      await fetch("http://localhost:5000/api/cart/add", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId: itemToAdd.id,
-          name: variantString ? `${itemToAdd.name} (${variantString})` : itemToAdd.name,
-          price: currentPrice
-        })
-      });
-    } catch (err) {
-      console.warn("Backend add to cart notice:", err);
-    }
-
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === itemToAdd.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === itemToAdd.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
-      return [...prev, { ...itemToAdd, quantity: 1 }];
+      variantString
     });
-
-    showNotification("success", `Added "${itemToAdd.name}" to cart!`);
   }
 
   async function handleBuyNow() {
@@ -157,8 +116,7 @@ function ProductDetail() {
   }
 
   async function handleLogout() {
-    await logout();
-    navigate("/login");
+    await performLogout(navigate, "/products");
   }
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -276,14 +234,14 @@ function ProductDetail() {
         </div>
       )}
 
-      
+      {/* Breadcrumb */}
       <div className="detail-breadcrumb">
         <span>Home</span> / <span>{product.category || "Store"}</span> / <span className="active">{product.name}</span>
       </div>
 
-      
+      {/* Detail Main Layout */}
       <div className="detail-grid">
-        
+        {/* Left Column: Image & Badges */}
         <div className="detail-left">
           <div className="detail-image-wrapper">
             <img
@@ -336,7 +294,7 @@ function ProductDetail() {
             {product.tag && <span className="tag-pill">{product.tag}</span>}
           </div>
 
-          {/* Color Selector (Dynamically rendered for any product colors format) */}
+          {/* Color Selector */}
           {colorList.length > 0 && (
             <div className="detail-option-group">
               <label className="option-label">
@@ -364,7 +322,7 @@ function ProductDetail() {
             </div>
           )}
 
-          {/* Variant Selector (Dynamically rendered for any product variants format) */}
+          {/* Variant Selector */}
           {variantList.length > 0 && (
             <div className="detail-option-group">
               <label className="option-label">Select Variant:</label>
@@ -410,7 +368,7 @@ function ProductDetail() {
             <p className="fee-note">+ ₹299 Protect Promise Fee • Inclusive of all taxes</p>
           </div>
 
-          {/* Product Specifications Section (Dynamically renders ANY specs structure uploaded by user) */}
+          {/* Specifications */}
           <div className="specs-section">
             <h3>Product Specifications</h3>
             {rawSpecs ? (

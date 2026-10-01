@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { registerUser, isAuthenticated, getUserRole } from "../services/authService";
+import { useCart } from "../context/CartContext";
 
 const COUNTRIES = [
   "India", "USA", "UK", "Canada", "Australia", "Germany", "France", "Japan", "China", 
@@ -27,6 +28,7 @@ function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
   const noticeMessage = location.state?.message;
+  const { loadUserCart } = useCart();
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -53,6 +55,7 @@ function Signup() {
 
     try {
       const data = await registerUser(formData);
+      loadUserCart();
 
       if (data.user?.role === "admin") {
         navigate("/users", { replace: true });

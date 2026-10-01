@@ -1,90 +1,20 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { logout, getToken, isAuthenticated, getUserRole } from "../services/authService";
+import { getToken, isAuthenticated, getUserRole } from "../services/authService";
+import { useCart } from "../context/CartContext";
 
 function Cart() {
   const navigate = useNavigate();
-  const [cart, setCart] = useState(() => {
-    try {
-      const savedCart = JSON.parse(localStorage.getItem("userCart") || "[]");
-      return Array.isArray(savedCart) ? savedCart : [];
-    } catch {
-      return [];
-    }
-  });
-  const [notification, setNotification] = useState(null);
+  const {
+    cart,
+    setCart,
+    updateQuantity,
+    removeFromCart,
+    performLogout,
+    notification,
+    setNotification,
+    showNotification
+  } = useCart();
 
-  const showNotification = (type, message) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
-  
-  useEffect(() => {
-    localStorage.setItem("userCart", JSON.stringify(cart));
-  }, [cart]);
-
-  
-  async function updateQuantity(productId, change) {
-    const item = cart.find((i) => i.id === productId);
-    if (!item) return;
-
-    const newQuantity = item.quantity + change;
-    const token = getToken();
-
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      await fetch("http://localhost:5000/api/cart/update", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          productId,
-          change,
-          newQuantity
-        })
-      });
-    } catch (err) {
-      console.warn("Backend cart update notice:", err);
-    }
-
-    setCart((prevCart) =>
-      prevCart
-        .map((item) =>
-          item.id === productId ? { ...item, quantity: newQuantity } : item
-        )
-        .filter((item) => item.quantity > 0)
-    );
-    showNotification("success", `Updated quantity for ${item.name}`);
-  }
-
-
-  async function removeFromCart(productId) {
-    const item = cart.find((i) => i.id === productId);
-    const token = getToken();
-
-    try {
-      const headers = {};
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      await fetch(`http://localhost:5000/api/cart/remove/${productId}`, {
-        method: "DELETE",
-        headers
-      });
-    } catch (err) {
-      console.warn("Backend cart remove notice:", err);
-    }
-
-    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
-    showNotification("success", `Removed "${item ? item.name : "Item"}" from cart.`);
-  }
-
-  
   async function handleCheckout() {
     if (cart.length === 0) return;
 
@@ -141,8 +71,7 @@ function Cart() {
   }
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/login");
+    await performLogout(navigate, "/cart");
   };
 
   const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -150,7 +79,6 @@ function Cart() {
 
   return (
     <div className="shop-container">
-     
       <div className="shop-header">
         <h1>🛒 Shopping Cart</h1>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -181,7 +109,6 @@ function Cart() {
         </div>
       </div>
 
-      
       {notification && (
         <div
           style={{
@@ -207,7 +134,6 @@ function Cart() {
         </div>
       )}
 
-      
       {cart.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0" }}>
           <h2>Your cart is empty 🛍️</h2>

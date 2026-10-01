@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { loginUser, isAuthenticated, getUserRole } from "../services/authService";
+import { useCart } from "../context/CartContext";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -11,6 +12,7 @@ function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const noticeMessage = location.state?.message;
+  const { loadUserCart } = useCart();
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -30,6 +32,7 @@ function Login() {
 
     try {
       const data = await loginUser(email, password);
+      loadUserCart();
 
       if (data.user?.role === "admin") {
         navigate("/users", { replace: true });

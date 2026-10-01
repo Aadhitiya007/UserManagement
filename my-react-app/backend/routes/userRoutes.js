@@ -16,7 +16,7 @@ const {
   downloadTemplate
 } = require("../controllers/userControllers");
 
-// Protected Admin Routes (Requires valid JWT + Admin Role)
+
 router.get('/', verifyToken, requireAdmin, getUsers);
 router.get('/export', verifyToken, requireAdmin, exportUsers);
 router.get('/template', downloadTemplate);
