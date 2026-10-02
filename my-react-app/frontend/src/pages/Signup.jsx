@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { registerUser, isAuthenticated, getUserRole } from "../services/authService";
 import { useCart } from "../context/CartContext";
+import "../styles/Auth.css";
 
 const COUNTRIES = [
   "India", "USA", "UK", "Canada", "Australia", "Germany", "France", "Japan", "China", 

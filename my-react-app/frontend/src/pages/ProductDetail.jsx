@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { isAuthenticated, getUserRole, getToken } from "../services/authService";
 import { useCart } from "../context/CartContext";
+import "../styles/ProductDetail.css";
 
 function formatKey(key) {
   if (!key) return "";
@@ -258,18 +259,18 @@ function ProductDetail() {
      
       <div className="shop-header">
         <h1>🛒 E-Shop</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <button className="btn-page" onClick={() => navigate("/products")}>
+        <div className="shop-header-actions">
+          <button className="btn-nav" onClick={() => navigate("/products")}>
             ← Back to Products
           </button>
-          <button className="btn-page" onClick={() => navigate("/cart")}>
+          <button className="btn-nav" onClick={() => navigate("/cart")}>
             🛒 View Cart ({totalCartCount})
           </button>
 
           {isAuthenticated() ? (
             <>
               {getUserRole() === "admin" && (
-                <button onClick={() => navigate("/users")} className="btn-edit">
+                <button onClick={() => navigate("/users")} className="btn-nav">
                   Admin Dashboard
                 </button>
               )}
@@ -279,10 +280,10 @@ function ProductDetail() {
             </>
           ) : (
             <>
-              <button onClick={() => navigate("/login")} className="btn-add">
+              <button onClick={() => navigate("/login")} className="btn-login">
                 Login
               </button>
-              <button onClick={() => navigate("/signup")} className="btn-edit">
+              <button onClick={() => navigate("/signup")} className="btn-signup">
                 Sign Up
               </button>
             </>

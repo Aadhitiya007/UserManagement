@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { loginUser, isAuthenticated, getUserRole } from "../services/authService";
 import { useCart } from "../context/CartContext";
+import "../styles/Auth.css";
 
 function Login() {
   const [email, setEmail] = useState("");

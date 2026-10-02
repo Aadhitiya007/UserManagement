@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getToken, isAuthenticated, getUserRole } from "../services/authService";
 import { useCart } from "../context/CartContext";
+import "../styles/Products.css";
 
 const CATEGORIES = ["All", "Electronics", "Mobiles", "Wearables", "Audio"];
 
@@ -135,11 +136,10 @@ function Products() {
     <div className="shop-container">
       <div className="shop-header">
         <h1>🛒 E-Shop</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div className="shop-header-actions">
           <button
             onClick={() => navigate("/cart")}
-            className="btn-page"
-            style={{ cursor: "pointer" }}
+            className="btn-nav"
           >
             🛒 View Cart ({totalCartCount})
           </button>
@@ -148,7 +148,7 @@ function Products() {
               {getUserRole() === "admin" && (
                 <button
                   onClick={() => navigate("/users")}
-                  className="btn-edit"
+                  className="btn-nav"
                 >
                   Admin Dashboard
                 </button>
@@ -161,13 +161,13 @@ function Products() {
             <>
               <button
                 onClick={() => navigate("/login")}
-                className="btn-add"
+                className="btn-login"
               >
                 Login
               </button>
               <button
                 onClick={() => navigate("/signup")}
-                className="btn-edit"
+                className="btn-signup"
               >
                 Sign Up
               </button>
@@ -209,11 +209,11 @@ function Products() {
           onChange={handleSearchChange}
         />
 
-        <div className="toolbar-actions">
+        <div className="category-bar">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
-              className={`btn-page ${selectedCategory === cat ? "active" : ""}`}
+              className={`category-btn ${selectedCategory === cat ? "active" : ""}`}
               onClick={() => handleCategoryChange(cat)}
             >
               {cat}

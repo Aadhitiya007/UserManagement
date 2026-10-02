@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { getToken, isAuthenticated, getUserRole } from "../services/authService";
 import { useCart } from "../context/CartContext";
+import "../styles/Products.css";
 
 function Cart() {
   const navigate = useNavigate();
@@ -81,14 +82,14 @@ function Cart() {
     <div className="shop-container">
       <div className="shop-header">
         <h1>🛒 Shopping Cart</h1>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <button className="btn-page" onClick={() => navigate("/products")}>
+        <div className="shop-header-actions">
+          <button className="btn-nav" onClick={() => navigate("/products")}>
             ← Back to Products
           </button>
           {isAuthenticated() ? (
             <>
               {getUserRole() === "admin" && (
-                <button className="btn-edit" onClick={() => navigate("/users")}>
+                <button className="btn-nav" onClick={() => navigate("/users")}>
                   Admin Dashboard
                 </button>
               )}
@@ -98,10 +99,10 @@ function Cart() {
             </>
           ) : (
             <>
-              <button className="btn-add" onClick={() => navigate("/login")}>
+              <button className="btn-login" onClick={() => navigate("/login")}>
                 Login
               </button>
-              <button className="btn-edit" onClick={() => navigate("/signup")}>
+              <button className="btn-signup" onClick={() => navigate("/signup")}>
                 Sign Up
               </button>
             </>
