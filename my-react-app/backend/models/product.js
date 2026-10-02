@@ -41,7 +41,8 @@ const productSchema = new mongoose.Schema(
       connectivity: { type: String }
     },
     colors: [colorSchema],
-    variants: [variantSchema]
+    variants: [variantSchema],
+    quantity: { type: Number, default: 10, min: 0 }
   },
   { timestamps: true }
 );

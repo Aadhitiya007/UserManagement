@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { isAuthenticated, getUserRole } from "../services/authService";
+import { isAuthenticated, getUserRole, getToken } from "../services/authService";
 import { useCart } from "../context/CartContext";
 
 function formatKey(key) {
@@ -22,6 +22,8 @@ function ProductDetail() {
   const [error, setError] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
+  const [purchasedOrder, setPurchasedOrder] = useState(null);
+  const [buying, setBuying] = useState(false);
 
   const {
     cart,
@@ -32,51 +34,128 @@ function ProductDetail() {
     showNotification
   } = useCart();
 
-  useEffect(() => {
-    async function fetchProduct() {
-      try {
-        setLoading(true);
-        const res = await fetch(`http://localhost:5000/api/products/${id}`);
-        if (!res.ok) {
-          throw new Error("Product not found");
-        }
-        const data = await res.json();
-        const formatted = {
-          ...data,
-          id: data._id || data.id
-        };
-        setProduct(formatted);
-
-        // Normalize colors if available
-        if (formatted.colors && formatted.colors.length > 0) {
-          const firstColor = typeof formatted.colors[0] === "string"
-            ? { name: formatted.colors[0], color: "#3b82f6" }
-            : formatted.colors[0];
-          setSelectedColor(firstColor);
-        }
-
-        // Normalize variants if available
-        if (formatted.variants && formatted.variants.length > 0) {
-          const firstVariant = typeof formatted.variants[0] === "string"
-            ? { label: formatted.variants[0], priceDiff: 0 }
-            : formatted.variants[0];
-          setSelectedVariant(firstVariant);
-        }
-      } catch (err) {
-        console.error("Error loading product detail:", err);
-        setError(err.message || "Failed to load product");
-      } finally {
-        setLoading(false);
+  const fetchProduct = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`http://localhost:5000/api/products/${id}`);
+      if (!res.ok) {
+        throw new Error("Product not found");
       }
-    }
+      const data = await res.json();
+      const formatted = {
+        ...data,
+        id: data._id || data.id,
+        quantity: data.quantity !== undefined ? data.quantity : 10
+      };
+      setProduct(formatted);
 
-    if (id) {
-      fetchProduct();
+      // Normalize colors if available
+      if (formatted.colors && formatted.colors.length > 0) {
+        const firstColor = typeof formatted.colors[0] === "string"
+          ? { name: formatted.colors[0], color: "#3b82f6" }
+          : formatted.colors[0];
+        setSelectedColor((prev) => prev || firstColor);
+      }
+
+      // Normalize variants if available
+      if (formatted.variants && formatted.variants.length > 0) {
+        const firstVariant = typeof formatted.variants[0] === "string"
+          ? { label: formatted.variants[0], priceDiff: 0 }
+          : formatted.variants[0];
+        setSelectedVariant((prev) => prev || firstVariant);
+      }
+    } catch (err) {
+      console.error("Error loading product detail:", err);
+      setError(err.message || "Failed to load product");
+    } finally {
+      setLoading(false);
     }
   }, [id]);
 
+  useEffect(() => {
+    if (id) {
+      fetchProduct();
+    }
+  }, [id, fetchProduct]);
+
+  const executeDirectPurchase = useCallback(async () => {
+    if (!product) return;
+
+    const variantDiff = selectedVariant?.priceDiff || 0;
+    const currentPrice = selectedVariant?.price
+      ? selectedVariant.price
+      : (product.price || 0) + variantDiff;
+
+    const colorName = selectedColor?.name || (typeof selectedColor === "string" ? selectedColor : "");
+    const variantLabel = selectedVariant?.label || selectedVariant?.name || (typeof selectedVariant === "string" ? selectedVariant : "");
+
+    const variantString = [variantLabel, colorName].filter(Boolean).join(" • ");
+    const displayName = variantString ? `${product.name} (${variantString})` : product.name;
+
+    const token = getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    setBuying(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/cart/checkout", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          items: [{
+            id: product.id,
+            name: displayName,
+            price: currentPrice,
+            quantity: 1
+          }],
+          totalPrice: currentPrice
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showNotification("error", data.message || "Purchase failed.");
+        return;
+      }
+
+      // Order placed successfully! Display success toast notification and purchase modal popup
+      showNotification("success", "🎉 Product has been purchased! Thank you for your order!");
+      setPurchasedOrder({
+        orderId: data.orderId,
+        itemName: displayName,
+        price: currentPrice
+      });
+
+      // Refresh product details to update backend quantity & stock status
+      fetchProduct();
+    } catch (err) {
+      showNotification("error", "Network error placing order.");
+    } finally {
+      setBuying(false);
+    }
+  }, [product, selectedVariant, selectedColor, showNotification, fetchProduct]);
+
   async function handleAddToCart() {
     if (!product) return;
+
+    if (product.quantity <= 0) {
+      showNotification("error", "Product is out of stock!");
+      return;
+    }
+
+    const existingInCart = cart.find((i) => i.id === product.id);
+    const qtyInCart = existingInCart ? existingInCart.quantity : 0;
+    if (qtyInCart + 1 > product.quantity) {
+      showNotification(
+        "error",
+        `Only ${product.quantity} ${product.quantity === 1 ? "item is" : "items are"} available in stock!`
+      );
+      return;
+    }
 
     const variantDiff = selectedVariant?.priceDiff || 0;
     const currentPrice = selectedVariant?.price
@@ -97,22 +176,24 @@ function ProductDetail() {
   async function handleBuyNow() {
     if (!product) return;
 
-    await handleAddToCart();
-
-    if (!isAuthenticated()) {
-      showNotification("error", "Please login or sign up to complete your purchase.");
-      setTimeout(() => {
-        navigate("/login", {
-          state: {
-            from: "/cart",
-            message: "Please log in or create an account to complete your purchase."
-          }
-        });
-      }, 1200);
+    if (product.quantity <= 0) {
+      showNotification("error", "Product is out of stock!");
       return;
     }
 
-    navigate("/cart");
+    if (!isAuthenticated()) {
+      showNotification("error", "Please login to complete your purchase.");
+      navigate("/login", {
+        state: {
+          from: `/products/${id}`,
+          autoBuy: true,
+          message: "Please log in to complete your purchase."
+        }
+      });
+      return;
+    }
+
+    await executeDirectPurchase();
   }
 
   async function handleLogout() {
@@ -142,6 +223,8 @@ function ProductDetail() {
       </div>
     );
   }
+
+  const isOutOfStock = product.quantity !== undefined && product.quantity <= 0;
 
   // Extract raw specifications object or array from product
   const rawSpecs = product.specs || product.specifications || product.details || product.features;
@@ -276,7 +359,7 @@ function ProductDetail() {
           </div>
         </div>
 
-        {/* Right Column: Title, Unique Specs, Options & Action Buttons */}
+        {/* Right Column: Title, Specs, Options & Action Buttons */}
         <div className="detail-right">
           <h2 className="detail-title">{product.name}</h2>
 
@@ -292,6 +375,15 @@ function ProductDetail() {
               {product.reviews ? product.reviews.toLocaleString() : "1,250"} ratings & reviews
             </span>
             {product.tag && <span className="tag-pill">{product.tag}</span>}
+          </div>
+
+          {/* Stock Display (Hidden quantity number) */}
+          <div style={{ marginTop: "12px", fontSize: "0.95rem", fontWeight: "bold" }}>
+            {!isOutOfStock ? (
+              <span style={{ color: "#059669" }}>📦 In Stock</span>
+            ) : (
+              <span style={{ color: "#dc2626" }}>❌ Out of Stock</span>
+            )}
           </div>
 
           {/* Color Selector */}
@@ -330,18 +422,18 @@ function ProductDetail() {
                 {variantList.map((v, idx) => {
                   const vLabel = v.label || v.name || (typeof v === "string" ? v : `Option ${idx + 1}`);
                   const vPrice = v.price ? v.price : (product.price || 0) + (v.priceDiff || 0);
-                  const isOutOfStock = v.status === "out-of-stock";
+                  const isVariantOut = v.status === "out-of-stock" || isOutOfStock;
                   const isSelected = (activeVariant?.label === vLabel) || (activeVariant?.name === vLabel) || (activeVariant === v);
 
                   return (
                     <button
                       key={vLabel || idx}
-                      disabled={isOutOfStock}
-                      className={`storage-card ${isSelected ? "selected" : ""} ${isOutOfStock ? "disabled" : ""}`}
-                      onClick={() => !isOutOfStock && setSelectedVariant(v)}
+                      disabled={isVariantOut}
+                      className={`storage-card ${isSelected ? "selected" : ""} ${isVariantOut ? "disabled" : ""}`}
+                      onClick={() => !isVariantOut && setSelectedVariant(v)}
                     >
                       <div className="storage-label">{vLabel}</div>
-                      {!isOutOfStock ? (
+                      {!isVariantOut ? (
                         <div className="storage-price">₹{vPrice.toLocaleString()}</div>
                       ) : (
                         <div className="storage-out">Out of stock</div>
@@ -411,15 +503,106 @@ function ProductDetail() {
 
           {/* Action Buttons */}
           <div className="detail-actions">
-            <button className="btn-add-cart-detail" onClick={handleAddToCart}>
-              🛒 Add to Cart
-            </button>
-            <button className="btn-buy-now-detail" onClick={handleBuyNow}>
-              ⚡ Buy Now at ₹{displayPrice ? displayPrice.toLocaleString() : 0}
-            </button>
+            {isOutOfStock ? (
+              <>
+                <button
+                  disabled
+                  className="btn-add-cart-detail"
+                  style={{ backgroundColor: "#ef4444", color: "#fff", cursor: "not-allowed", border: "none" }}
+                >
+                  Out of Stock ❌
+                </button>
+                <button
+                  disabled
+                  className="btn-buy-now-detail"
+                  style={{ backgroundColor: "#9ca3af", color: "#fff", cursor: "not-allowed", border: "none" }}
+                >
+                  Unavailable
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn-add-cart-detail" onClick={handleAddToCart}>
+                  🛒 Add to Cart
+                </button>
+                <button className="btn-buy-now-detail" disabled={buying} onClick={handleBuyNow}>
+                  {buying ? "Processing..." : `⚡ Buy Now at ₹${displayPrice ? displayPrice.toLocaleString() : 0}`}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Product Purchased Success Popup Modal */}
+      {purchasedOrder && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            backdropFilter: "blur(4px)"
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              padding: "36px 28px",
+              maxWidth: "460px",
+              width: "90%",
+              textAlign: "center",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+            }}
+          >
+            <div style={{ fontSize: "3.5rem", marginBottom: "12px" }}>🎉</div>
+            <h2 style={{ color: "#065f46", margin: "0 0 10px", fontSize: "1.6rem" }}>
+              Product Has Been Purchased! Thank You!
+            </h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginBottom: "20px" }}>
+              Your order has been placed successfully and product quantity has been reduced in database.
+            </p>
+
+            <div
+              style={{
+                backgroundColor: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "10px",
+                padding: "16px",
+                textAlign: "left",
+                marginBottom: "24px"
+              }}
+            >
+              <div style={{ fontSize: "0.85rem", color: "#166534", marginBottom: "6px" }}>
+                <strong>Order ID:</strong> {purchasedOrder.orderId}
+              </div>
+              <div style={{ fontSize: "1rem", color: "#14532d", fontWeight: "bold", marginBottom: "6px" }}>
+                {purchasedOrder.itemName}
+              </div>
+              <div style={{ fontSize: "0.95rem", color: "#15803d" }}>
+                <strong>Total Amount Paid:</strong> ₹{purchasedOrder.price.toLocaleString()}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+              <button
+                className="btn-add"
+                style={{ width: "100%", padding: "12px", fontSize: "1.05rem", borderRadius: "8px" }}
+                onClick={() => setPurchasedOrder(null)}
+              >
+                Close & Continue 🛍️
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

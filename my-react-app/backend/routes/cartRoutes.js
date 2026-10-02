@@ -11,7 +11,7 @@ const {
 router.post("/add", optionalVerifyToken, addToCart);
 router.post("/update", optionalVerifyToken, updateQuantity);
 router.delete("/remove/:productId", optionalVerifyToken, removeFromCart);
-router.post("/checkout", verifyToken, checkout);
+router.post("/checkout", optionalVerifyToken, checkout);
 
 module.exports = router;
 

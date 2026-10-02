@@ -38,7 +38,7 @@ function Login() {
         navigate("/users", { replace: true });
       } else {
         const from = location.state?.from || "/products";
-        navigate(from, { replace: true });
+        navigate(from, { replace: true, state: location.state });
       }
     } catch (err) {
       setError(err.message);

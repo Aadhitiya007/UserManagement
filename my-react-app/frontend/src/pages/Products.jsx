@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getToken, isAuthenticated, getUserRole } from "../services/authService";
 import { useCart } from "../context/CartContext";
@@ -15,7 +15,6 @@ function Products() {
   const {
     cart,
     setCart,
-    addToCart,
     updateQuantity,
     removeFromCart,
     performLogout,
@@ -24,26 +23,27 @@ function Products() {
     showNotification
   } = useCart();
 
-  useEffect(() => {
-    async function fetchProducts() {
-      try {
-        const res = await fetch("http://localhost:5000/api/products");
-        const data = await res.json();
-        const formattedData = data.map((item) => ({
-          ...item,
-          id: item._id || item.id
-        }));
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/products");
+      const data = await res.json();
+      const formattedData = data.map((item) => ({
+        ...item,
+        id: item._id || item.id,
+        quantity: item.quantity !== undefined ? item.quantity : 10
+      }));
 
-        setProducts(formattedData);
-      } catch (err) {
-        console.error("Error fetching products:", err);
-      } finally {
-        setLoading(false);
-      }
+      setProducts(formattedData);
+    } catch (err) {
+      console.error("Error fetching products:", err);
+    } finally {
+      setLoading(false);
     }
-
-    fetchProducts();
   }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   async function handleOrder() {
     if (!isAuthenticated()) {
@@ -96,6 +96,7 @@ function Products() {
 
       showNotification("success", `🎉 Order ${data.orderId} placed for ₹${totalPrice.toLocaleString()}!`);
       setCart([]);
+      fetchProducts(); // Refresh stock in database
     } catch (err) {
       showNotification("error", "Network error: Failed to place order.");
     }
@@ -121,6 +122,14 @@ function Products() {
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const totalCartPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  if (loading) {
+    return (
+      <div className="shop-container" style={{ textAlign: "center", padding: "60px 0" }}>
+        <h2>Loading products... ⌛</h2>
+      </div>
+    );
+  }
 
   return (
     <div className="shop-container">
@@ -217,47 +226,76 @@ function Products() {
         {filteredProducts.length === 0 ? (
           <p className="empty-message">No products match your search or category filter.</p>
         ) : (
-          filteredProducts.map((p) => (
-            <div
-              key={p.id}
-              className="product-card clickable-product-card"
-              onClick={() => navigate(`/products/${p.id}`)}
-              style={{ cursor: "pointer" }}
-            >
-              <img
-                src={p.image || "https://via.placeholder.com/300x150?text=Product+Image"}
-                alt={p.name}
-                style={{ width: "100%", height: "150px", objectFit: "cover", borderRadius: "6px", marginBottom: "10px" }}
-              />
-              <h3>{p.name}</h3>
-              <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                ⭐ {p.rating || 4.5} ({p.reviews ? p.reviews.toLocaleString() : '1,250'} reviews) {p.tag ? `• ${p.tag}` : ''}
-              </p>
-              <div style={{ marginBottom: "12px" }}>
-                <span className="product-price">₹{p.price ? p.price.toLocaleString() : 0}</span>{" "}
-                {p.originalPrice && (
-                  <span style={{ textDecoration: "line-through", color: "var(--text-muted)", fontSize: "0.85rem", marginRight: "6px" }}>
-                    ₹{p.originalPrice.toLocaleString()}
-                  </span>
-                )}
-                {p.discount && (
-                  <span style={{ color: "#10b981", fontSize: "0.85rem", fontWeight: "bold" }}>
-                    {p.discount}
-                  </span>
+          filteredProducts.map((p) => {
+            const isOutOfStock = p.quantity <= 0;
+            return (
+              <div
+                key={p.id}
+                className="product-card clickable-product-card"
+                onClick={() => navigate(`/products/${p.id}`)}
+                style={{ cursor: "pointer", opacity: isOutOfStock ? 0.8 : 1 }}
+              >
+                <img
+                  src={p.image || "https://via.placeholder.com/300x150?text=Product+Image"}
+                  alt={p.name}
+                  style={{ width: "100%", height: "150px", objectFit: "cover", borderRadius: "6px", marginBottom: "10px" }}
+                />
+                <h3>{p.name}</h3>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                  ⭐ {p.rating || 4.5} ({p.reviews ? p.reviews.toLocaleString() : '1,250'} reviews) {p.tag ? `• ${p.tag}` : ''}
+                </p>
+                <div style={{ marginBottom: "6px" }}>
+                  <span className="product-price">₹{p.price ? p.price.toLocaleString() : 0}</span>{" "}
+                  {p.originalPrice && (
+                    <span style={{ textDecoration: "line-through", color: "var(--text-muted)", fontSize: "0.85rem", marginRight: "6px" }}>
+                      ₹{p.originalPrice.toLocaleString()}
+                    </span>
+                  )}
+                  {p.discount && (
+                    <span style={{ color: "#10b981", fontSize: "0.85rem", fontWeight: "bold" }}>
+                      {p.discount}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: "12px", fontSize: "0.85rem", fontWeight: "bold" }}>
+                  {!isOutOfStock ? (
+                    <span style={{ color: "#059669" }}>📦 In Stock</span>
+                  ) : (
+                    <span style={{ color: "#dc2626" }}>❌ Out of Stock</span>
+                  )}
+                </div>
+
+                {isOutOfStock ? (
+                  <button
+                    disabled
+                    className="btn-page"
+                    style={{
+                      width: "100%",
+                      fontWeight: "bold",
+                      backgroundColor: "#ef4444",
+                      color: "#ffffff",
+                      cursor: "not-allowed",
+                      border: "none"
+                    }}
+                  >
+                    Out of Stock ❌
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/products/${p.id}`);
+                    }}
+                    className="btn-page btn-view-detail"
+                    style={{ width: "100%", fontWeight: "bold" }}
+                  >
+                    🔍 View Specs & Buy
+                  </button>
                 )}
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/products/${p.id}`);
-                }}
-                className="btn-page btn-view-detail"
-                style={{ width: "100%", fontWeight: "bold" }}
-              >
-                🔍 View Specs & Buy
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

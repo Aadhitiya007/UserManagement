@@ -81,7 +81,7 @@ function UserForm() {
       newErrors.age = "Age is required";
     } else if (isNaN(ageNum) || ageNum < 19) {
       newErrors.age = "Age must be greater than 18";
-    } else if (ageNum > 120) {
+    } else if (ageNum > 100) {
       newErrors.age = "Please enter a valid age";
     }
 
