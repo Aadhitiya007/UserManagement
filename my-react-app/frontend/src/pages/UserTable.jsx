@@ -15,8 +15,6 @@ function UserTable() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [isImporting, setIsImporting] = useState(false);
-
-  // Pagination States (10 users per page)
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
@@ -39,7 +37,7 @@ function UserTable() {
 
   function searchUsers(value) {
     setSearch(value);
-    setCurrentPage(1); // Reset to page 1 on new search
+    setCurrentPage(1);
   }
 
   async function handleFileImport(e) {
@@ -78,7 +76,7 @@ function UserTable() {
     }
   }
 
-  // Single User Inline Delete
+ 
   async function handleDeleteSingle(id) {
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
@@ -89,7 +87,7 @@ function UserTable() {
     }
   }
 
-  // Delete ALL Users in Database
+ 
   async function handleDeleteAllDatabaseUsers() {
     if (!confirm("⚠️ WARNING: Are you sure you want to delete ALL users from the database? This action cannot be undone!")) return;
     try {
@@ -220,7 +218,7 @@ function UserTable() {
                 <td>{user.number}</td>
                 <td>{user.country}</td>
 
-                {/* Per-Person Action Buttons */}
+                
                 <td>
                   <div className="action-buttons">
                     <button
@@ -244,7 +242,7 @@ function UserTable() {
       </table>
       </div>
 
-      {/* Pagination Controls */}
+     
       <div className="pagination-container">
         <div className="pagination-info">
           Showing <span>{users.length > 0 ? (currentPage - 1) * limit + 1 : 0}</span> to <span>{Math.min(currentPage * limit, totalUsers)}</span> of <span>{totalUsers}</span> users

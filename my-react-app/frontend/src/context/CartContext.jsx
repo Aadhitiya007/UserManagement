@@ -36,7 +36,7 @@ export function CartProvider({ children }) {
     setCart(userCart);
   }, []);
 
-  // Sync cart to user-specific localStorage whenever cart updates while logged in
+
   useEffect(() => {
     if (isAuthenticated()) {
       const key = getUserCartKey();

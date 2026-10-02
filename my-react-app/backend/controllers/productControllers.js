@@ -61,7 +61,7 @@ const createProduct = async (req, res) => {
         }
         const newProduct = await Product.create(productData);
 
-        // Create corresponding inventory record in Inventory collection
+        
         try {
             await Inventory.create({
                 productId: newProduct._id,

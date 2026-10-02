@@ -47,7 +47,6 @@ exports.checkout = async (req, res) => {
   }
 
   try {
-    // 1. Check stock for all items directly from DB
     for (const item of items) {
       const targetId = item.id || item._id || item.productId;
       if (targetId) {
@@ -76,8 +75,7 @@ exports.checkout = async (req, res) => {
         }
       }
     }
-
-    // 2. Reduce quantity in Product DB & sync to separate Inventory DB
+    
     const updatedProducts = [];
     for (const item of items) {
       const targetId = item.id || item._id || item.productId;

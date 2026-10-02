@@ -49,7 +49,7 @@ function ProductDetail() {
       };
       setProduct(formatted);
 
-      // Normalize colors if available
+      
       if (formatted.colors && formatted.colors.length > 0) {
         const firstColor = typeof formatted.colors[0] === "string"
           ? { name: formatted.colors[0], color: "#3b82f6" }
@@ -57,7 +57,6 @@ function ProductDetail() {
         setSelectedColor((prev) => prev || firstColor);
       }
 
-      // Normalize variants if available
       if (formatted.variants && formatted.variants.length > 0) {
         const firstVariant = typeof formatted.variants[0] === "string"
           ? { label: formatted.variants[0], priceDiff: 0 }
@@ -122,7 +121,7 @@ function ProductDetail() {
         return;
       }
 
-      // Order placed successfully! Display success toast notification and purchase modal popup
+      
       showNotification("success", "🎉 Product has been purchased! Thank you for your order!");
       setPurchasedOrder({
         orderId: data.orderId,
@@ -130,7 +129,7 @@ function ProductDetail() {
         price: currentPrice
       });
 
-      // Refresh product details to update backend quantity & stock status
+      
       fetchProduct();
     } catch (err) {
       showNotification("error", "Network error placing order.");
@@ -226,16 +225,16 @@ function ProductDetail() {
 
   const isOutOfStock = product.quantity !== undefined && product.quantity <= 0;
 
-  // Extract raw specifications object or array from product
+  
   const rawSpecs = product.specs || product.specifications || product.details || product.features;
 
-  // Extract colors
+ 
   const rawColors = product.colors || product.colorOptions || [];
   const colorList = rawColors.map((c) =>
     typeof c === "string" ? { name: c, color: "#3b82f6" } : c
   );
 
-  // Extract variants
+ 
   const rawVariants = product.variants || product.options || [];
   const variantList = rawVariants.map((v) =>
     typeof v === "string" ? { label: v, priceDiff: 0 } : v
@@ -256,7 +255,7 @@ function ProductDetail() {
 
   return (
     <div className="shop-container">
-      {/* Top Header */}
+     
       <div className="shop-header">
         <h1>🛒 E-Shop</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -291,7 +290,7 @@ function ProductDetail() {
         </div>
       </div>
 
-      {/* Notification Toast */}
+      
       {notification && (
         <div
           style={{
@@ -317,14 +316,14 @@ function ProductDetail() {
         </div>
       )}
 
-      {/* Breadcrumb */}
+    
       <div className="detail-breadcrumb">
         <span>Home</span> / <span>{product.category || "Store"}</span> / <span className="active">{product.name}</span>
       </div>
 
-      {/* Detail Main Layout */}
+    
       <div className="detail-grid">
-        {/* Left Column: Image & Badges */}
+       
         <div className="detail-left">
           <div className="detail-image-wrapper">
             <img
@@ -359,7 +358,7 @@ function ProductDetail() {
           </div>
         </div>
 
-        {/* Right Column: Title, Specs, Options & Action Buttons */}
+       
         <div className="detail-right">
           <h2 className="detail-title">{product.name}</h2>
 
@@ -377,7 +376,7 @@ function ProductDetail() {
             {product.tag && <span className="tag-pill">{product.tag}</span>}
           </div>
 
-          {/* Stock Display (Hidden quantity number) */}
+          
           <div style={{ marginTop: "12px", fontSize: "0.95rem", fontWeight: "bold" }}>
             {!isOutOfStock ? (
               <span style={{ color: "#059669" }}>📦 In Stock</span>
@@ -386,7 +385,7 @@ function ProductDetail() {
             )}
           </div>
 
-          {/* Color Selector */}
+         
           {colorList.length > 0 && (
             <div className="detail-option-group">
               <label className="option-label">
@@ -414,7 +413,7 @@ function ProductDetail() {
             </div>
           )}
 
-          {/* Variant Selector */}
+         
           {variantList.length > 0 && (
             <div className="detail-option-group">
               <label className="option-label">Select Variant:</label>
@@ -446,7 +445,7 @@ function ProductDetail() {
             </div>
           )}
 
-          {/* Price Box */}
+      
           <div className="detail-price-box">
             <div className="price-row">
               <span className="main-price">₹{displayPrice ? displayPrice.toLocaleString() : 0}</span>
@@ -460,7 +459,7 @@ function ProductDetail() {
             <p className="fee-note">+ ₹299 Protect Promise Fee • Inclusive of all taxes</p>
           </div>
 
-          {/* Specifications */}
+        
           <div className="specs-section">
             <h3>Product Specifications</h3>
             {rawSpecs ? (
@@ -501,7 +500,7 @@ function ProductDetail() {
             )}
           </div>
 
-          {/* Action Buttons */}
+          
           <div className="detail-actions">
             {isOutOfStock ? (
               <>
@@ -534,7 +533,7 @@ function ProductDetail() {
         </div>
       </div>
 
-      {/* Product Purchased Success Popup Modal */}
+      
       {purchasedOrder && (
         <div
           style={{

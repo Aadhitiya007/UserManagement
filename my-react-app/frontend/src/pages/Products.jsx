@@ -96,7 +96,7 @@ function Products() {
 
       showNotification("success", `🎉 Order ${data.orderId} placed for ₹${totalPrice.toLocaleString()}!`);
       setCart([]);
-      fetchProducts(); // Refresh stock in database
+      fetchProducts(); 
     } catch (err) {
       showNotification("error", "Network error: Failed to place order.");
     }

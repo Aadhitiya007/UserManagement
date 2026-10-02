@@ -104,9 +104,7 @@ function UserForm() {
     event.preventDefault();
     setApiError("");
 
-    // Validate on frontend to highlight input fields immediately
     const isValid = validate();
-
     const formData = new FormData();
     formData.append("name", name.trim());
     formData.append("email", email.trim());
