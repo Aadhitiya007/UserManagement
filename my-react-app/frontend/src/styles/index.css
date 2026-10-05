@@ -302,3 +302,199 @@ td {
   border: 1px solid #e2e8f0;
   margin-top: 10px;
 }
+
+/* Flipkart Style Extensions */
+.rating-badge {
+  background-color: #388e3c;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rating-count {
+  color: #878787;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.price-container {
+  display: flex;
+  align-items: baseline;
+  margin: 12px 0 20px;
+}
+
+.selling-price {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #1e293b;
+}
+
+.mrp-price {
+  font-size: 1.1rem;
+  color: #878787;
+  text-decoration: line-through;
+  margin-left: 12px;
+}
+
+.discount-badge {
+  font-size: 1rem;
+  color: #388e3c;
+  font-weight: 700;
+  margin-left: 12px;
+}
+
+/* Delivery Pincode Checker */
+.pincode-container {
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  padding: 16px 0;
+  margin: 20px 0;
+}
+
+.pincode-input-group {
+  display: flex;
+  gap: 10px;
+  max-width: 320px;
+  margin-top: 8px;
+}
+
+.pincode-btn {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.delivery-status {
+  font-size: 0.88rem;
+  color: #15803d;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+/* Trust Badges Grid */
+.trust-badges-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+  background: #f8fafc;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
+.trust-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+.trust-item span.icon {
+  font-size: 1.3rem;
+  margin-bottom: 4px;
+}
+
+/* Product Key Specs Table */
+.specs-container {
+  margin-top: 30px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 20px;
+}
+
+.specs-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: #1e293b;
+}
+
+.specs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.specs-table td {
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.specs-table td.spec-key {
+  width: 35%;
+  color: #878787;
+  font-weight: 500;
+}
+
+.specs-table td.spec-val {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+/* Reviews & Ratings Section */
+.reviews-section {
+  margin-top: 40px;
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.star-rating-input {
+  display: flex;
+  gap: 6px;
+  font-size: 1.6rem;
+  cursor: pointer;
+  margin: 10px 0 16px;
+}
+
+.star-rating-input .star {
+  color: #cbd5e1;
+  transition: color 0.15s;
+}
+
+.star-rating-input .star.active {
+  color: #f59e0b;
+}
+
+.verified-buyer-badge {
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 0.78rem;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.review-card {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 16px 0;
+}
+
+.review-card:last-child {
+  border-bottom: none;
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+

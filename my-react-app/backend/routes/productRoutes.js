@@ -8,11 +8,15 @@ const {
   getProductById,
   createProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  checkPurchaseEligibility,
+  createProductReview
 } = require("../controllers/productController");
 
 router.get("/", getProducts);
 router.get("/:id", getProductById);
+router.get("/:id/can-review", verifyToken, checkPurchaseEligibility);
+router.post("/:id/reviews", verifyToken, createProductReview);
 router.post("/", verifyToken, requireAdmin, upload.single("image"), createProduct);
 router.put("/:id", verifyToken, requireAdmin, upload.single("image"), updateProduct);
 router.delete("/:id", verifyToken, requireAdmin, deleteProduct);

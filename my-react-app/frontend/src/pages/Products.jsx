@@ -11,13 +11,19 @@ function Products() {
   const { addToCart } = useCart();
 
   useEffect(() => {
-    getProducts();
-  }, []);
+    const delayDebounce = setTimeout(() => {
+      getProducts(search);
+    }, 300);
+    return () => clearTimeout(delayDebounce);
+  }, [search]);
 
-  async function getProducts() {
+  async function getProducts(query = "") {
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/products");
+      const url = query
+        ? `http://localhost:5000/api/products?search=${encodeURIComponent(query)}`
+        : "http://localhost:5000/api/products";
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch products");
       setProducts(data);
@@ -27,11 +33,6 @@ function Products() {
       setLoading(false);
     }
   }
-
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <>
@@ -43,7 +44,7 @@ function Products() {
             type="text"
             className="form-control"
             placeholder="Search products..."
-            style={{ width: "260px" }}
+            style={{ width: "260px",maxWith:"500px" }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -57,11 +58,11 @@ function Products() {
 
         {loading ? (
           <p>Loading products...</p>
-        ) : filteredProducts.length === 0 ? (
+        ) : products.length === 0 ? (
           <p>No products found.</p>
         ) : (
           <div className="product-grid">
-            {filteredProducts.map((product) => {
+            {products.map((product) => {
               const imageUrl = product.image
                 ? (product.image.startsWith("http") ? product.image : `http://localhost:5000${product.image}`)
                 : "https://via.placeholder.com/300x180?text=No+Image";

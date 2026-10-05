@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
+import OrderSuccessModal from "../components/OrderSuccessModal";
 
 function Cart() {
   const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const [placedOrder, setPlacedOrder] = useState(null);
 
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -44,6 +46,7 @@ function Cart() {
           totalAmount
         })
       });
+      
 
       const data = await res.json();
 
@@ -51,15 +54,15 @@ function Cart() {
         throw new Error(data.message || "Failed to place order");
       }
 
-      alert("🎉 Order placed successfully!");
       clearCart();
-      navigate("/orders");
+      setPlacedOrder(data.order || data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }
+  
 
   return (
     <>
@@ -146,6 +149,11 @@ function Cart() {
                 <span>Total Amount:</span>
                 <span style={{ color: "#2563eb" }}>₹{totalAmount}</span>
               </div>
+<OrderSuccessModal
+  order={placedOrder}
+  isOpen={Boolean(placedOrder)}
+  onClose={() => setPlacedOrder(null)}
+/>
 
               <button
                 onClick={handleCheckout}

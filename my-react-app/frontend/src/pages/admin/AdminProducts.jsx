@@ -7,15 +7,22 @@ function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const delayDebounce = setTimeout(() => {
+      fetchProducts(search);
+    }, 300);
+    return () => clearTimeout(delayDebounce);
+  }, [search]);
 
-  async function fetchProducts() {
+  async function fetchProducts(query = "") {
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/products");
+      const url = query
+        ? `http://localhost:5000/api/products?search=${encodeURIComponent(query)}`
+        : "http://localhost:5000/api/products";
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch products");
       setProducts(data);
@@ -51,8 +58,19 @@ function AdminProducts() {
       <div className="admin-layout">
         <AdminSidebar />
         <main className="admin-content">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
             <h2>Product Management</h2>
+
+            {/* Product Search Bar */}
+            <input
+              type="text"
+              className="form-control"
+              placeholder="🔍 Search products by name, category, or description..."
+              style={{ width: "340px" }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+
             <Link to="/admin/products/add" className="btn btn-primary">
               ➕ Add New Product
             </Link>
@@ -67,7 +85,7 @@ function AdminProducts() {
           {loading ? (
             <p>Loading products...</p>
           ) : products.length === 0 ? (
-            <p>No products found. Add your first product!</p>
+            <p>No matching products found.</p>
           ) : (
             <div className="table-container">
               <table>

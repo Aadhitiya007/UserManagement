@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 // Register new user
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, age, country, phone } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Name, email, and password are required" });
@@ -24,7 +24,10 @@ exports.register = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || "user"
+      role: role || "user",
+      age,
+      country,
+      phone
     });
 
     const token = jwt.sign(
@@ -87,4 +90,3 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-module.exports = require("./authController");
