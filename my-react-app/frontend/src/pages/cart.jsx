@@ -1,204 +1,165 @@
-import { useNavigate } from "react-router-dom";
-import { getToken, isAuthenticated, getUserRole } from "../services/authService";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
-import "../styles/Products.css";
 
 function Cart() {
+  const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
-  const {
-    cart,
-    setCart,
-    updateQuantity,
-    removeFromCart,
-    performLogout,
-    notification,
-    setNotification,
-    showNotification
-  } = useCart();
+
+  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   async function handleCheckout() {
-    if (cart.length === 0) return;
-
-    if (!isAuthenticated()) {
-      showNotification("error", "Please login or sign up to complete your purchase.");
-      setTimeout(() => {
-        navigate("/login", {
-          state: {
-            from: "/cart",
-            message: "Please log in or create an account to complete your purchase."
-          }
-        });
-      }, 1200);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Please login to place an order.");
+      navigate("/login");
       return;
     }
 
-    const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const token = getToken();
+    if (cart.length === 0) return;
 
     try {
-      const res = await fetch("http://localhost:5000/api/cart/checkout", {
+      setLoading(true);
+      setError("");
+
+      const orderProducts = cart.map((item) => ({
+        productId: item._id || item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        image: item.image || ""
+      }));
+
+      const res = await fetch("http://localhost:5000/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ items: cart, totalPrice })
+        body: JSON.stringify({
+          products: orderProducts,
+          totalAmount
+        })
       });
 
       const data = await res.json();
 
-      if (res.status === 401 || res.status === 403) {
-        showNotification("error", "Session expired. Redirecting to login...");
-        setTimeout(() => {
-          navigate("/login", {
-            state: {
-              from: "/cart",
-              message: "Please log in to complete your purchase."
-            }
-          });
-        }, 1500);
-        return;
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to place order");
       }
 
-      if (res.ok) {
-        showNotification("success", `🎉 Order ${data.orderId} placed for ₹${totalPrice.toLocaleString()}!`);
-        setCart([]);
-      } else {
-        showNotification("error", data.message || "Checkout failed.");
-      }
+      alert("🎉 Order placed successfully!");
+      clearCart();
+      navigate("/orders");
     } catch (err) {
-      showNotification("error", "Network error placing order.");
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   }
 
-  const handleLogout = async () => {
-    await performLogout(navigate, "/cart");
-  };
-
-  const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
   return (
-    <div className="shop-container">
-      <div className="shop-header">
-        <h1>🛒 Shopping Cart</h1>
-        <div className="shop-header-actions">
-          <button className="btn-nav" onClick={() => navigate("/products")}>
-            ← Back to Products
-          </button>
-          {isAuthenticated() ? (
-            <>
-              {getUserRole() === "admin" && (
-                <button className="btn-nav" onClick={() => navigate("/users")}>
-                  Admin Dashboard
-                </button>
-              )}
-              <button className="btn-delete btn-logout" onClick={handleLogout}>
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="btn-login" onClick={() => navigate("/login")}>
-                Login
-              </button>
-              <button className="btn-signup" onClick={() => navigate("/signup")}>
-                Sign Up
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+    <>
+      <Navbar />
+      <div className="container">
+        <h2 style={{ marginBottom: "20px" }}>Shopping Cart</h2>
 
-      {notification && (
-        <div
-          style={{
-            padding: "12px 16px",
-            margin: "12px 0",
-            borderRadius: "6px",
-            fontWeight: "bold",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            backgroundColor: notification.type === "success" ? "#d1fae5" : "#fee2e2",
-            color: notification.type === "success" ? "#065f46" : "#991b1b",
-            border: `1px solid ${notification.type === "success" ? "#a7f3d0" : "#fecaca"}`
-          }}
-        >
-          <span>{notification.message}</span>
-          <button
-            onClick={() => setNotification(null)}
-            style={{ background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {cart.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <h2>Your cart is empty 🛍️</h2>
-          <p style={{ color: "var(--text-secondary)", margin: "10px 0 20px" }}>
-            Looks like you haven't added any items to your cart yet.
-          </p>
-          <button className="btn-add" onClick={() => navigate("/products")}>
-            Explore Products
-          </button>
-        </div>
-      ) : (
-        <div className="cart-summary" style={{ marginTop: "20px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
-            <h3>Total Items: {totalCount}</h3>
-            <h3>Total Amount: ₹{totalPrice.toLocaleString()}</h3>
+        {error && (
+          <div style={{ padding: "12px", background: "#fee2e2", color: "#991b1b", borderRadius: "6px", marginBottom: "20px" }}>
+            {error}
           </div>
+        )}
 
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {cart.map((item) => (
-              <li
-                key={item.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "12px",
-                  borderBottom: "1px solid var(--border-hairline)"
-                }}
+        {cart.length === 0 ? (
+          <div style={{ background: "white", padding: "40px", textAlign: "center", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+            <p style={{ fontSize: "1.1rem", color: "#6b7280", marginBottom: "20px" }}>Your cart is empty.</p>
+            <Link to="/products" className="btn btn-primary">
+              Browse Products
+            </Link>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "30px" }}>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Price</th>
+                    <th>Quantity</th>
+                    <th>Subtotal</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map((item) => {
+                    const id = item._id || item.id;
+                    const imageUrl = item.image
+                      ? (item.image.startsWith("http") ? item.image : `http://localhost:5000${item.image}`)
+                      : "https://via.placeholder.com/60";
+
+                    return (
+                      <tr key={id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <img src={imageUrl} alt={item.name} style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "4px" }} />
+                            <span style={{ fontWeight: "500" }}>{item.name}</span>
+                          </div>
+                        </td>
+                        <td>₹{item.price}</td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                              onClick={() => updateQuantity(id, item.quantity - 1)}
+                              className="btn btn-outline btn-sm"
+                            >
+                              -
+                            </button>
+                            <span style={{ padding: "0 8px", fontWeight: "600" }}>{item.quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(id, item.quantity + 1)}
+                              className="btn btn-outline btn-sm"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
+                        <td style={{ fontWeight: "600", color: "#2563eb" }}>₹{item.price * item.quantity}</td>
+                        <td>
+                          <button onClick={() => removeFromCart(id)} className="btn btn-danger btn-sm">
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #e2e8f0", height: "fit-content" }}>
+              <h3 style={{ marginBottom: "15px", borderBottom: "1px solid #e2e8f0", pb: "10px" }}>Order Summary</h3>
+
+              <div style={{ display: "flex", justifyContent: "space-between", margin: "15px 0", fontSize: "1.2rem", fontWeight: "bold" }}>
+                <span>Total Amount:</span>
+                <span style={{ color: "#2563eb" }}>₹{totalAmount}</span>
+              </div>
+
+              <button
+                onClick={handleCheckout}
+                className="btn btn-primary"
+                style={{ width: "100%", padding: "12px", marginTop: "10px" }}
+                disabled={loading}
               >
-                <div>
-                  <strong>{item.name}</strong>
-                  <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                    ₹{item.price.toLocaleString()} × {item.quantity} = ₹{(item.price * item.quantity).toLocaleString()}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button className="btn-edit btn-sm" onClick={() => updateQuantity(item.id, -1)}>
-                    -
-                  </button>
-                  <span style={{ fontWeight: "bold", minWidth: "20px", textAlign: "center" }}>
-                    {item.quantity}
-                  </span>
-                  <button className="btn-edit btn-sm" onClick={() => updateQuantity(item.id, 1)}>
-                    +
-                  </button>
-                  <button className="btn-delete btn-sm" onClick={() => removeFromCart(item.id)}>
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <button
-            className="btn-add"
-            style={{ marginTop: "24px", width: "100%", fontSize: "1.1rem", padding: "12px" }}
-            onClick={handleCheckout}
-          >
-            💳 Proceed to Checkout (₹{totalPrice.toLocaleString()})
-          </button>
-        </div>
-      )}
-    </div>
+                {loading ? "Placing Order..." : "Place Order"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

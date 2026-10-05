@@ -1,11 +1,2 @@
-const requireAdmin = (req, res, next) => {
-    if (!req.user || req.user.role !== "admin") {
-        return res.status(403).json({
-            message: "Access denied. Administrator privileges required."
-        });
-    }
-    next();
-};
-
-module.exports = { requireAdmin };
-
+const { adminMiddleware } = require("./authMiddleware");
+module.exports = { requireAdmin: adminMiddleware };
