@@ -61,7 +61,6 @@ function AdminProducts() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
             <h2>Product Management</h2>
 
-            {/* Product Search Bar */}
             <input
               type="text"
               className="form-control"

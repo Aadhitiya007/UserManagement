@@ -15,7 +15,6 @@ try {
 }
 dns.setDefaultResultOrder("ipv4first");
 
-// Ensure upload directories exist
 const uploadDir = path.join(__dirname, "uploads", "products");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -28,29 +27,24 @@ const orderRoutes = require("./routes/orderRoutes");
 
 const app = express();
 
-// Middlewares
 app.use(cors({
   origin: process.env.CLIENT_URL || ["http://localhost:5173", "http://localhost:3000"],
   credentials: true
 }));
 app.use(express.json());
 
-// Serve static uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Log incoming requests
 app.use((req, res, next) => {
   console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 
-// Error Handling Middleware
 app.use((err, req, res, next) => {
   console.error("Server Error:", err.message || err);
   res.status(err.status || 500).json({
@@ -58,7 +52,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Connect to MongoDB & Start Server
 const MONGO_URL = process.env.MONGO_URL || "mongodb://127.0.0.1:27017/student-ecommerce";
 const PORT = process.env.PORT || 5000;
 

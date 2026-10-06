@@ -2,7 +2,6 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const User = require("../models/User");
 
-// Create new order (User)
 exports.createOrder = async (req, res) => {
   try {
     const { products, totalAmount } = req.body;
@@ -11,7 +10,6 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
-    // Save order in database
     const order = await Order.create({
       userId: req.user.id,
       userName: req.user.name || "Customer",
@@ -21,7 +19,6 @@ exports.createOrder = async (req, res) => {
       status: "Pending"
     });
 
-    // Reduce product stock for each ordered item
     for (const item of products) {
       const product = await Product.findById(item.productId);
       if (product) {
@@ -36,7 +33,6 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// Get orders of logged-in user
 exports.getUserOrders = async (req, res) => {
   try {
     const orders = await Order.find({ userId: req.user.id }).sort({ createdAt: -1 });
@@ -46,7 +42,6 @@ exports.getUserOrders = async (req, res) => {
   }
 };
 
-// Get all orders (Admin)
 exports.getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 });
@@ -56,7 +51,6 @@ exports.getAllOrders = async (req, res) => {
   }
 };
 
-// Update order status (Admin)
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -77,14 +71,12 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// Get Admin Dashboard Overview Statistics
 exports.getAdminStats = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalProducts = await Product.countDocuments();
     const totalOrders = await Order.countDocuments();
 
-    // Calculate total revenue from non-cancelled orders
     const orders = await Order.find({ status: { $ne: "Cancelled" } });
     const totalRevenue = orders.reduce((sum, ord) => sum + (ord.totalAmount || 0), 0);
 
@@ -98,3 +90,4 @@ exports.getAdminStats = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+

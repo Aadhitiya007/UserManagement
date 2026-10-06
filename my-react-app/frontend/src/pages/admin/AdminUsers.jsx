@@ -113,7 +113,6 @@ function AdminUsers() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
             <h2>User Account Management</h2>
             
-            {/* User Search Bar */}
             <input
               type="text"
               className="form-control"
@@ -186,7 +185,6 @@ function AdminUsers() {
             </div>
           )}
 
-          {/* Edit User Modal Pop-up */}
           {editingUser && (
             <div className="modal-backdrop" onClick={() => setEditingUser(null)}>
               <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "500px" }}>

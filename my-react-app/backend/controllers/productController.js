@@ -1,7 +1,6 @@
 const Product = require("../models/Product");
 const Order = require("../models/Order");
 
-// Get all products (supports backend search query: /api/products?search=term)
 exports.getProducts = async (req, res) => {
   try {
     const { search } = req.query;
@@ -25,7 +24,6 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// Get single product by ID
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -38,7 +36,6 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-// Create product (Admin only)
 exports.createProduct = async (req, res) => {
   try {
     const { name, description, price, category, stock } = req.body;
@@ -69,7 +66,6 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// Update product (Admin only)
 exports.updateProduct = async (req, res) => {
   try {
     const { name, description, price, category, stock } = req.body;
@@ -98,7 +94,6 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// Delete product (Admin only)
 exports.deleteProduct = async (req, res) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
@@ -110,7 +105,7 @@ exports.deleteProduct = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// Check if user has purchased the product
+
 exports.checkPurchaseEligibility = async (req, res) => {
   try {
     const hasPurchased = await Order.findOne({
@@ -125,7 +120,6 @@ exports.checkPurchaseEligibility = async (req, res) => {
   }
 };
 
-// Create or update product review (Verified purchasers only)
 exports.createProductReview = async (req, res) => {
   try {
     const { rating, comment } = req.body;
@@ -139,7 +133,6 @@ exports.createProductReview = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // 🔒 Verified Purchase Check: Must have a non-cancelled order for this product
     const hasPurchased = await Order.findOne({
       userId: req.user.id,
       "products.productId": req.params.id,
@@ -168,7 +161,6 @@ exports.createProductReview = async (req, res) => {
       });
     }
 
-    // Recalculate average rating & total review count
     product.reviewsCount = product.reviews.length;
     const totalStars = product.reviews.reduce((sum, item) => sum + item.rating, 0);
     product.rating = Math.round((totalStars / product.reviews.length) * 10) / 10;

@@ -1,6 +1,5 @@
 const User = require("../models/User");
 
-// Get all users (supports backend search query: /api/users?search=term)
 exports.getUsers = async (req, res) => {
   try {
     const { search } = req.query;
@@ -26,7 +25,6 @@ exports.getUsers = async (req, res) => {
   }
 };
 
-// Delete user (Admin only)
 exports.deleteUser = async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
@@ -38,7 +36,7 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// Update user details (Admin only)
+
 exports.updateUser = async (req, res) => {
   try {
     const { name, email, role, age, country, phone } = req.body;

@@ -4,7 +4,6 @@ const jwt = require("jsonwebtoken");
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
-// Register new user
 exports.register = async (req, res) => {
   try {
     const { name, email, password, role, age, country, phone } = req.body;
@@ -51,7 +50,6 @@ exports.register = async (req, res) => {
   }
 };
 
-// Login user
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
