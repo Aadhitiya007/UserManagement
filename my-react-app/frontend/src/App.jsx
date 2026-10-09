@@ -16,7 +16,22 @@ import EditProduct from "./pages/admin/EditProduct";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminUsers from "./pages/admin/AdminUsers";
 
+import {useEffect} from "react";
+import {io} from "socket.io-client";
+
 function App() {
+  useEffect(()=>{
+    const socket =io("http://localhost:5000");
+    socket.on("connect",()=>{
+      console.log("Connected to WebSocket:",socket.id);
+    });
+    socket.on("disconnect",()=>{
+      console.log("Disconnected from WebSocket");
+    });
+    return()=>{
+      socket.disconnect();
+    };
+  },[]);
   return (
     <BrowserRouter>
       <CartProvider>

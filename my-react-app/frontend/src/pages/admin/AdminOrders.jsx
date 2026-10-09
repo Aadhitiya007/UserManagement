@@ -44,7 +44,7 @@ function AdminOrders() {
       if (!res.ok) throw new Error(data.message || "Failed to update status");
 
       setOrders(orders.map((o) => (o._id === orderId ? { ...o, status: newStatus } : o)));
-      alert("Order status updated successfully!");
+      
     } catch (err) {
       alert(err.message);
     }

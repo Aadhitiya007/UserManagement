@@ -4,6 +4,8 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const dns = require("dns");
+const http =require("http");
+const{ Server } = require("socket.io");
 
 require("dotenv").config();
 
@@ -26,6 +28,27 @@ const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 
 const app = express();
+
+const server = http.createServer(app);
+
+const io = new Server(server,{
+  cors:{
+    origin: process.env.CLIENT_URL||[
+      "http://localhost:5173",
+      "http://localhost:3000"
+    ],
+    credentials: true
+  }
+});
+app.set("io",io);
+
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
 
 app.use(cors({
   origin: process.env.CLIENT_URL || ["http://localhost:5173", "http://localhost:3000"],
@@ -61,10 +84,13 @@ mongoose
   })
   .then(() => {
     console.log("MongoDB connected successfully");
-    app.listen(PORT, () => {
+
+    server.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error.message);
   });
+
+ 

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import{io} from "socket.io-client";
 import Navbar from "../components/Navbar";
+
 
 function Orders() {
   const [orders, setOrders] = useState([]);
@@ -7,8 +9,26 @@ function Orders() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchMyOrders();
-  }, []);
+  fetchMyOrders();
+
+  const socket = io("http://localhost:5000");
+
+  socket.on("orderStatusUpdated", (data) => {
+    console.log("Order status updated:", data);
+
+    setOrders((currentOrders) =>
+      currentOrders.map((order) =>
+        order._id === data.orderId
+          ? { ...order, status: data.status }
+          : order
+      )
+    );
+  });
+
+  return () => {
+    socket.disconnect();
+  };
+}, []);
 
   async function fetchMyOrders() {
     const token = localStorage.getItem("token");

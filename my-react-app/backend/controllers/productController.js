@@ -1,5 +1,7 @@
 const Product = require("../models/Product");
 const Order = require("../models/Order");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const s3 = require("../config/s3");
 
 exports.getProducts = async (req, res) => {
   try {
@@ -45,11 +47,23 @@ exports.createProduct = async (req, res) => {
     }
 
     let image = "";
-    if (req.file) {
-      image = `/uploads/products/${req.file.filename}`;
-    } else if (req.body.image) {
-      image = req.body.image;
-    }
+
+if (req.file) {
+  const fileName = `products/${Date.now()}-${req.file.originalname}`;
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key: fileName,
+    Body: req.file.buffer,
+    ContentType: req.file.mimetype
+  });
+
+  await s3.send(command);
+
+  image = fileName;
+} else if (req.body.image) {
+  image = req.body.image;
+}
 
     const product = await Product.create({
       name,
@@ -82,10 +96,21 @@ exports.updateProduct = async (req, res) => {
     if (stock !== undefined) product.stock = Number(stock);
 
     if (req.file) {
-      product.image = `/uploads/products/${req.file.filename}`;
-    } else if (req.body.image) {
-      product.image = req.body.image;
-    }
+  const fileName = `products/${Date.now()}-${req.file.originalname}`;
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key: fileName,
+    Body: req.file.buffer,
+    ContentType: req.file.mimetype
+  });
+
+  await s3.send(command);
+
+  product.image = fileName;
+} else if (req.body.image) {
+  product.image = req.body.image;
+}
 
     await product.save();
     res.json({ message: "Product updated successfully", product });

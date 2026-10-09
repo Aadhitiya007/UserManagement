@@ -216,10 +216,6 @@ function ProductDetail() {
                     <td className="spec-val">{product.category}</td>
                   </tr>
                   <tr>
-                    <td className="spec-key">Available Stock</td>
-                    <td className="spec-val">{product.stock} units</td>
-                  </tr>
-                  <tr>
                     <td className="spec-key">Warranty</td>
                     <td className="spec-val">{warranty}</td>
                   </tr>

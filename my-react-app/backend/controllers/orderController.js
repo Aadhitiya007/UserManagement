@@ -54,20 +54,36 @@ exports.getAllOrders = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
+
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+      return res.status(404).json({
+        message: "Order not found"
+      });
     }
 
     if (status) {
       order.status = status;
       await order.save();
+      
+      const io = req.app.get("io");
+
+      io.emit("orderStatusUpdated", {
+        orderId: order._id,
+        status: order.status
+      });
     }
 
-    res.json({ message: "Order status updated", order });
+    res.json({
+      message: "Order status updated",
+      order
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
