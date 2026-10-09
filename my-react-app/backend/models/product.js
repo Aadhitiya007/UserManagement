@@ -1,47 +1,73 @@
 const mongoose = require("mongoose");
 
-const colorSchema = new mongoose.Schema(
+const reviewSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    color: { type: String, required: true }
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+    userName: {
+      type: String,
+      required: true
+    },
+    rating: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5
+    },
+    comment: {
+      type: String,
+      required: true
+    }
   },
-  { _id: false }
-);
-
-const variantSchema = new mongoose.Schema(
-  {
-    label: { type: String, required: true },
-    priceDiff: { type: Number, default: 0 },
-    status: { type: String, default: "in-stock" },
-    badge: { type: String }
-  },
-  { _id: false }
+  { timestamps: true }
 );
 
 const productSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    category: { type: String, required: true },
-    price: { type: Number, required: true },
-    originalPrice: { type: Number, required: true },
-    discount: { type: String },
-    rating: { type: Number, default: 4.5 },
-    reviews: { type: Number, default: 0 },
-    image: { type: String, required: true },
-    tag: { type: String },
-    description: { type: String },
-    specs: {
-      display: { type: String },
-      processor: { type: String },
-      camera: { type: String },
-      battery: { type: String },
-      os: { type: String },
-      warranty: { type: String },
-      sound: { type: String },
-      connectivity: { type: String }
+    name: {
+      type: String,
+      required: [true, "Product name is required"]
     },
-    colors: [colorSchema],
-    variants: [variantSchema]
+    description: {
+      type: String,
+      default: ""
+    },
+    price: {
+      type: Number,
+      required: [true, "Product price is required"]
+    },
+    category: {
+      type: String,
+      required: [true, "Product category is required"]
+    },
+    stock: {
+      type: Number,
+      required: [true, "Product stock quantity is required"],
+      default: 0
+    },
+    image: {
+      type: String,
+      default: ""
+    },
+    mrp: {
+      type: Number
+    },
+    rating: {
+      type: Number,
+      default: 0
+    },
+    reviewsCount: {
+      type: Number,
+      default: 0
+    },
+    warranty: {
+      type: String,
+      default: "1 Year Manufacturer Warranty"
+    },
+    reviews: [reviewSchema]
   },
   { timestamps: true }
 );

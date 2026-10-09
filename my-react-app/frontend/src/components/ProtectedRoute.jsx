@@ -1,21 +1,18 @@
 import { Navigate } from "react-router-dom";
-import { isAuthenticated, getUserRole } from "../services/authService";
 
 function ProtectedRoute({ children, allowedRoles }) {
-    if (!isAuthenticated()) {
-        return <Navigate to="/login" replace />;
-    }
+  const token = localStorage.getItem("token");
+  const user = JSON.parse(localStorage.getItem("user") || "null");
 
-    const role = getUserRole();
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
 
-    if (allowedRoles && !allowedRoles.includes(role)) {
-        if (role === "user") {
-            return <Navigate to="/products" replace />;
-        }
-        return <Navigate to="/users" replace />;
-    }
+  if (allowedRoles && (!user || !allowedRoles.includes(user.role))) {
+    return <Navigate to="/products" replace />;
+  }
 
-    return children;
+  return children;
 }
 
 export default ProtectedRoute;

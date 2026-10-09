@@ -1,27 +1,13 @@
-import { useState, useEffect } from "react";
-import { useNavigate, Link, useLocation } from "react-router-dom";
-import { loginUser, isAuthenticated, getUserRole } from "../services/authService";
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import Navbar from "../components/Navbar";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const navigate = useNavigate();
-  const location = useLocation();
-  const noticeMessage = location.state?.message;
-
-  useEffect(() => {
-    if (isAuthenticated()) {
-      const role = getUserRole();
-      if (role === "admin") {
-        navigate("/users", { replace: true });
-      } else {
-        navigate("/products", { replace: true });
-      }
-    }
-  }, [navigate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -29,13 +15,26 @@ function Login() {
     setLoading(true);
 
     try {
-      const data = await loginUser(email, password);
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Login failed");
+      }
+
+      // Store auth data in localStorage
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
       if (data.user?.role === "admin") {
-        navigate("/users", { replace: true });
+        navigate("/admin/dashboard");
       } else {
-        const from = location.state?.from || "/products";
-        navigate(from, { replace: true });
+        navigate("/products");
       }
     } catch (err) {
       setError(err.message);
@@ -45,60 +44,54 @@ function Login() {
   }
 
   return (
-    <div className="auth-container">
-      <h2>🔐 Account Login</h2>
+    <>
+      <Navbar />
+      <div className="container">
+        <div className="form-card">
+          <h2 style={{ marginBottom: "20px", textAlign: "center" }}>User Login</h2>
 
-      {noticeMessage && (
-        <div
-          style={{
-            padding: "10px 14px",
-            marginBottom: "16px",
-            borderRadius: "6px",
-            backgroundColor: "#eff6ff",
-            color: "#1d4ed8",
-            border: "1px solid #bfdbfe",
-            fontSize: "0.9rem",
-            fontWeight: "500"
-          }}
-        >
-          {noticeMessage}
+          {error && (
+            <div style={{ padding: "10px", background: "#fee2e2", color: "#991b1b", borderRadius: "6px", marginBottom: "15px" }}>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                className="form-control"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="email@example.com"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="Enter password"
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ width: "100%" }} disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </button>
+          </form>
+
+          <p style={{ marginTop: "20px", textAlign: "center", color: "#6b7280" }}>
+            Don't have an account? <Link to="/signup" style={{ color: "#2563eb" }}>Register</Link>
+          </p>
         </div>
-      )}
-
-      {error && <div className="error-message">{error}</div>}
-
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>Email</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="email@example.com"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Password</label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter password"
-          />
-        </div>
-
-        <button type="submit" disabled={loading} className="btn-add">
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
-
-      <p className="auth-footer">
-        Don't have an account? <Link to="/signup" state={location.state}>Sign Up</Link>
-      </p>
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -1,58 +1,121 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { CartProvider } from "./context/CartContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 
-import UserTable from "./pages/UserTable";
-import UserForm from "./pages/UserForm";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/cart";
+import Orders from "./pages/Orders";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import ProtectedRoute from "./components/ProtectedRoute";
+
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminProducts from "./pages/admin/AdminProducts";
+import AddProduct from "./pages/admin/AddProduct";
+import EditProduct from "./pages/admin/EditProduct";
+import AdminOrders from "./pages/admin/AdminOrders";
+import AdminUsers from "./pages/admin/AdminUsers";
+
+import {useEffect} from "react";
+import {io} from "socket.io-client";
 
 function App() {
+  useEffect(()=>{
+    const socket =io("http://localhost:5000");
+    socket.on("connect",()=>{
+      console.log("Connected to WebSocket:",socket.id);
+    });
+    socket.on("disconnect",()=>{
+      console.log("Disconnected from WebSocket");
+    });
+    return()=>{
+      socket.disconnect();
+    };
+  },[]);
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+      <CartProvider>
+        <Routes>
+          {/* Public Storefront Routes */}
+          <Route path="/" element={<Navigate to="/products" replace />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/products/:id" element={<ProductDetail />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
-        {/* Admin Only Routes */}
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute allowedRoles={["admin"]}>
-              <UserTable />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/users/add"
-          element={
-            <ProtectedRoute allowedRoles={["admin"]}>
-              <UserForm />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/users/edit/:id"
-          element={
-            <ProtectedRoute allowedRoles={["admin"]}>
-              <UserForm />
-            </ProtectedRoute>
-          }
-        />
+          {/* User Protected Routes */}
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Public Store & Cart Routes */}
-        <Route path="/products" element={<Products />} />
-        <Route path="/products/:id" element={<ProductDetail />} />
-        <Route path="/cart" element={<Cart />} />
+          {/* Admin Protected Routes */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/products"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminProducts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/products/add"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AddProduct />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/products/edit/:id"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <EditProduct />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/orders"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminOrders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Fallback */}
-        <Route
-          path="*"
-          element={<Navigate to="/products" replace />}
-        />
-      </Routes>
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/products" replace />} />
+        </Routes>
+      </CartProvider>
     </BrowserRouter>
   );
 }
