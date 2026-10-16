@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
+import { API_URL } from "../../config/api";
 
 function EditProduct() {
   const { id } = useParams();
@@ -23,7 +24,7 @@ function EditProduct() {
     async function fetchProduct() {
       try {
         setLoading(true);
-        const res = await fetch(`http://localhost:5000/api/products/${id}`);
+        const res = await fetch(`${API_URL}/api/products/${id}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed to load product details");
 
@@ -68,7 +69,7 @@ function EditProduct() {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/products/${id}`, {
+      const res = await fetch(`${API_URL}/api/products/${id}`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
         body: formData
@@ -92,7 +93,7 @@ function EditProduct() {
   if (loading) return <><Navbar /><div className="admin-layout"><AdminSidebar /><main className="admin-content"><p>Loading product details...</p></main></div></>;
 
   const displayImage = imagePreview || (currentImage
-    ? (currentImage.startsWith("http") ? currentImage : `http://localhost:5000${currentImage}`)
+    ? (currentImage.startsWith("http") ? currentImage : `${API_URL}${currentImage}`)
     : "");
 
   return (

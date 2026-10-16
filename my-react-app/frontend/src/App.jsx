@@ -18,10 +18,11 @@ import AdminUsers from "./pages/admin/AdminUsers";
 
 import {useEffect} from "react";
 import {io} from "socket.io-client";
+import { API_URL } from "./config/api";
 
 function App() {
   useEffect(()=>{
-    const socket =io("http://localhost:5000");
+    const socket = io(API_URL);
     socket.on("connect",()=>{
       console.log("Connected to WebSocket:",socket.id);
     });

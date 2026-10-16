@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import{io} from "socket.io-client";
+import { io } from "socket.io-client";
 import Navbar from "../components/Navbar";
+import { API_URL } from "../config/api";
 
 
 function Orders() {
@@ -11,7 +12,7 @@ function Orders() {
   useEffect(() => {
   fetchMyOrders();
 
-  const socket = io("http://localhost:5000");
+  const socket = io(API_URL);
 
   socket.on("orderStatusUpdated", (data) => {
     console.log("Order status updated:", data);
@@ -36,7 +37,7 @@ function Orders() {
 
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/orders/my-orders", {
+      const res = await fetch(`${API_URL}/api/orders/my-orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();

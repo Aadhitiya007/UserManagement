@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
+import { API_URL } from "../../config/api";
 
 function AddProduct() {
   const [name, setName] = useState("");
@@ -43,7 +44,7 @@ function AddProduct() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/products", {
+      const res = await fetch(`${API_URL}/api/products`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`

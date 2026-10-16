@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
+import { API_URL } from "../../config/api";
 
 function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -30,8 +31,8 @@ function AdminUsers() {
     try {
       setLoading(true);
       const url = query
-        ? `http://localhost:5000/api/users?search=${encodeURIComponent(query)}`
-        : "http://localhost:5000/api/users";
+        ? `${API_URL}/api/users?search=${encodeURIComponent(query)}`
+        : `${API_URL}/api/users`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -64,7 +65,7 @@ function AdminUsers() {
     const token = localStorage.getItem("token");
     try {
       setSaveLoading(true);
-      const res = await fetch(`http://localhost:5000/api/users/${editingUser._id}`, {
+      const res = await fetch(`${API_URL}/api/users/${editingUser._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -90,7 +91,7 @@ function AdminUsers() {
 
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${id}`, {
+      const res = await fetch(`${API_URL}/api/users/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       });

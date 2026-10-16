@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
+import { API_URL } from "../../config/api";
 
 function AdminProducts() {
   const [products, setProducts] = useState([]);
@@ -20,8 +21,8 @@ function AdminProducts() {
     try {
       setLoading(true);
       const url = query
-        ? `http://localhost:5000/api/products?search=${encodeURIComponent(query)}`
-        : "http://localhost:5000/api/products";
+        ? `${API_URL}/api/products?search=${encodeURIComponent(query)}`
+        : `${API_URL}/api/products`;
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch products");
@@ -38,7 +39,7 @@ function AdminProducts() {
 
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`http://localhost:5000/api/products/${id}`, {
+      const res = await fetch(`${API_URL}/api/products/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -101,7 +102,7 @@ function AdminProducts() {
                 <tbody>
                   {products.map((product) => {
                     const imageUrl = product.image
-                      ? (product.image.startsWith("http") ? product.image : `http://localhost:5000${product.image}`)
+                      ? (product.image.startsWith("http") ? product.image : `${API_URL}${product.image}`)
                       : "https://via.placeholder.com/50";
 
                     return (

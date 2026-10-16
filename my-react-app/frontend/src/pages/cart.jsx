@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
 import OrderSuccessModal from "../components/OrderSuccessModal";
+import { API_URL } from "../config/api";
 
 function Cart() {
   const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
@@ -14,9 +15,11 @@ function Cart() {
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   async function handleCheckout() {
+    if (loading) return;
+
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("Please login to place an order.");
+      
       navigate("/login");
       return;
     }
@@ -35,7 +38,7 @@ function Cart() {
         image: item.image || ""
       }));
 
-      const res = await fetch("http://localhost:5000/api/orders", {
+      const res = await fetch(`${API_URL}/api/orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -99,15 +102,28 @@ function Cart() {
                 <tbody>
                   {cart.map((item) => {
                     const id = item._id || item.id;
-                    const imageUrl = item.image
-                      ? (item.image.startsWith("http") ? item.image : `http://localhost:5000${item.image}`)
+                    const rawImg = item.image ? encodeURI(item.image) : "";
+                    const imageUrl = rawImg
+                      ? (rawImg.startsWith("http")
+                          ? rawImg
+                          : rawImg.startsWith("products/")
+                            ? `https://my-ecommerce-product-images-2026.s3.ap-southeast-2.amazonaws.com/${rawImg}`
+                            : `${API_URL}/${rawImg.replace(/^\//, "")}`)
                       : "https://via.placeholder.com/60";
 
                     return (
                       <tr key={id}>
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <img src={imageUrl} alt={item.name} style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "4px" }} />
+                            <img
+                              src={imageUrl}
+                              alt={item.name}
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = "https://via.placeholder.com/60?text=No+Img";
+                              }}
+                              style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "4px" }}
+                            />
                             <span style={{ fontWeight: "500" }}>{item.name}</span>
                           </div>
                         </td>

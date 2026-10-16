@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
+import { API_URL } from "../../config/api";
 
 function AdminOrders() {
   const [orders, setOrders] = useState([]);
@@ -15,7 +16,7 @@ function AdminOrders() {
     const token = localStorage.getItem("token");
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/orders", {
+      const res = await fetch(`${API_URL}/api/orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -31,7 +32,7 @@ function AdminOrders() {
   async function handleStatusChange(orderId, newStatus) {
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

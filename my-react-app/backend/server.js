@@ -31,16 +31,19 @@ const app = express();
 
 const server = http.createServer(app);
 
-const io = new Server(server,{
-  cors:{
-    origin: process.env.CLIENT_URL||[
-      "http://localhost:5173",
-      "http://localhost:3000"
-    ],
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  ...(process.env.CLIENT_URL ? [process.env.CLIENT_URL.replace(/\/$/, "")] : [])
+];
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
     credentials: true
   }
 });
-app.set("io",io);
+app.set("io", io);
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
@@ -51,7 +54,7 @@ io.on("connection", (socket) => {
 });
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || ["http://localhost:5173", "http://localhost:3000"],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());

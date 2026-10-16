@@ -54,7 +54,10 @@ exports.updateUser = async (req, res) => {
     if (phone) user.phone = phone;
 
     await user.save();
-    res.json({ message: "User updated successfully", user });
+    const sanitizedUser = user.toObject();
+    delete sanitizedUser.password;
+
+    res.json({ message: "User updated successfully", user: sanitizedUser });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

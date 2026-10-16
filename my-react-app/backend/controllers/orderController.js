@@ -10,6 +10,31 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
+    // 1. Verify all products exist and have sufficient stock
+    for (const item of products) {
+      const product = await Product.findById(item.productId);
+
+      if (!product) {
+        return res.status(404).json({
+          message: `Product "${item.name}" was not found.`
+        });
+      }
+
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Insufficient stock for "${product.name}". Only ${product.stock} available.`
+        });
+      }
+    }
+
+    // 2. Atomically deduct stock
+    for (const item of products) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: { stock: -item.quantity }
+      });
+    }
+
+    // 3. Create the order
     const order = await Order.create({
       userId: req.user.id,
       userName: req.user.name || "Customer",
@@ -18,14 +43,6 @@ exports.createOrder = async (req, res) => {
       totalAmount,
       status: "Pending"
     });
-
-    for (const item of products) {
-      const product = await Product.findById(item.productId);
-      if (product) {
-        product.stock = Math.max(0, product.stock - item.quantity);
-        await product.save();
-      }
-    }
 
     res.status(201).json({ message: "Order placed successfully", order });
   } catch (error) {
@@ -64,6 +81,24 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     if (status) {
+      // If order is being cancelled, restore inventory
+      if (status === "Cancelled" && order.status !== "Cancelled") {
+        for (const item of order.products) {
+          await Product.findByIdAndUpdate(item.productId, {
+            $inc: { stock: item.quantity }
+          });
+        }
+      }
+
+      // If a previously cancelled order is being reinstated, re-deduct stock
+      if (order.status === "Cancelled" && status !== "Cancelled") {
+        for (const item of order.products) {
+          await Product.findByIdAndUpdate(item.productId, {
+            $inc: { stock: -item.quantity }
+          });
+        }
+      }
+
       order.status = status;
       await order.save();
       
