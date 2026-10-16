@@ -2,13 +2,26 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
+import { API_URL } from "../config/api";
+import { throttle } from "../utils/throttle";
 
 function Products() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const { addToCart } = useCart();
+
+  useEffect(() => {
+    // Throttled scroll listener: only checks every 150ms instead of 100+ times/sec
+    const handleScroll = throttle(() => {
+      setShowScrollTop(window.scrollY > 250);
+    }, 150);
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
@@ -21,8 +34,8 @@ function Products() {
     try {
       setLoading(true);
       const url = query
-        ? `http://localhost:5000/api/products?search=${encodeURIComponent(query)}`
-        : "http://localhost:5000/api/products";
+        ? `${API_URL}/api/products?search=${encodeURIComponent(query)}`
+        : `${API_URL}/api/products`;
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch products");
@@ -63,15 +76,27 @@ function Products() {
         ) : (
           <div className="product-grid">
             {products.map((product) => {
-              const imageUrl = product.image
-                ? (product.image.startsWith("http") ? product.image : `http://localhost:5000${product.image}`)
+              const rawImg = product.image ? encodeURI(product.image) : "";
+              const imageUrl = rawImg
+                ? (rawImg.startsWith("http")
+                    ? rawImg
+                    : rawImg.startsWith("products/")
+                      ? `https://my-ecommerce-product-images-2026.s3.ap-southeast-2.amazonaws.com/${rawImg}`
+                      : `${API_URL}/${rawImg.replace(/^\//, "")}`)
                 : "https://via.placeholder.com/300x180?text=No+Image";
 
               const isOutOfStock = product.stock <= 0;
 
               return (
                 <div key={product._id} className="product-card">
-                  <img src={imageUrl} alt={product.name} />
+                  <img
+                    src={imageUrl}
+                    alt={product.name}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "https://via.placeholder.com/300x180?text=No+Image";
+                    }}
+                  />
                   <div className="product-card-body">
                     <span style={{ fontSize: "0.8rem", color: "#6b7280", textTransform: "uppercase" }}>
                       {product.category}
@@ -103,6 +128,17 @@ function Products() {
               );
             })}
           </div>
+        )}
+
+        {/* Throttled Smooth Back-to-Top Floating Button */}
+        {showScrollTop && (
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="scroll-to-top-btn"
+            title="Back to Top"
+          >
+            ↑
+          </button>
         )}
       </div>
     </>

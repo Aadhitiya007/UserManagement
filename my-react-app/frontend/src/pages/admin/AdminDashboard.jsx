@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
+import { API_URL } from "../../config/api";
 
 function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -21,7 +22,7 @@ function AdminDashboard() {
     const token = localStorage.getItem("token");
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/orders/stats", {
+      const res = await fetch(`${API_URL}/api/orders/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();

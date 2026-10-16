@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
 import OrderSuccessModal from "../components/OrderSuccessModal";
+import { API_URL } from "../config/api";
+import { throttle } from "../utils/throttle";
 
 function ProductDetail() {
   const { id } = useParams();
@@ -12,6 +14,7 @@ function ProductDetail() {
   const [error, setError] = useState("");
   const [placedOrder, setPlacedOrder] = useState(null);
   const [buying, setBuying] = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState(false);
 
   // Verified Buyer & Review States
   const [canReview, setCanReview] = useState(false);
@@ -31,7 +34,7 @@ function ProductDetail() {
   async function fetchProductDetails() {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/products/${id}`);
+      const res = await fetch(`${API_URL}/api/products/${id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Product not found");
       setProduct(data);
@@ -49,7 +52,7 @@ function ProductDetail() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:5000/api/products/${id}/can-review`, {
+      const res = await fetch(`${API_URL}/api/products/${id}/can-review`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -80,7 +83,7 @@ function ProductDetail() {
     try {
       setReviewSubmitting(true);
       setReviewMessage("");
-      const res = await fetch(`http://localhost:5000/api/products/${id}/reviews`, {
+      const res = await fetch(`${API_URL}/api/products/${id}/reviews`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -124,8 +127,13 @@ function ProductDetail() {
     );
   }
 
-  const imageUrl = product.image
-    ? (product.image.startsWith("http") ? product.image : `http://localhost:5000${product.image}`)
+  const rawImg = product.image ? encodeURI(product.image) : "";
+  const imageUrl = rawImg
+    ? (rawImg.startsWith("http")
+        ? rawImg
+        : rawImg.startsWith("products/")
+          ? `https://my-ecommerce-product-images-2026.s3.ap-southeast-2.amazonaws.com/${rawImg}`
+          : `${API_URL}/${rawImg.replace(/^\//, "")}`)
     : "https://via.placeholder.com/400x300?text=No+Image";
 
   const isOutOfStock = product.stock <= 0;
@@ -141,10 +149,12 @@ function ProductDetail() {
   const totalReviews = product.reviewsCount || reviewsList.length;
   const warranty = product.warranty || "1 Year Manufacturer Warranty";
 
-  function handleAddToCart() {
+  // Throttled Add to Cart: prevents spam-clicking and replaces annoying alert with smooth feedback
+  const handleAddToCart = throttle(() => {
     addToCart(product, quantity);
-    alert(`Added ${quantity} "${product.name}" to cart!`);
-  }
+    setAddedFeedback(true);
+    setTimeout(() => setAddedFeedback(false), 1800);
+  }, 800);
 
   async function handleBuyNow() {
     const token = localStorage.getItem("token");
@@ -155,7 +165,7 @@ function ProductDetail() {
     }
     try {
       setBuying(true);
-      const res = await fetch("http://localhost:5000/api/orders", {
+      const res = await fetch(`${API_URL}/api/orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,6 +210,10 @@ function ProductDetail() {
             <img
               src={imageUrl}
               alt={product.name}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "https://via.placeholder.com/400x300?text=No+Image";
+              }}
               style={{ width: "100%", maxHeight: "380px", objectFit: "cover", borderRadius: "8px" }}
             />
 
@@ -296,10 +310,17 @@ function ProductDetail() {
               <button
                 onClick={handleAddToCart}
                 disabled={isOutOfStock}
-                className="btn btn-outline"
-                style={{ flex: 1, padding: "12px" }}
+                className={`btn ${addedFeedback ? "btn-success" : "btn-outline"}`}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  transition: "all 0.25s ease",
+                  background: addedFeedback ? "#16a34a" : "",
+                  color: addedFeedback ? "#ffffff" : "",
+                  borderColor: addedFeedback ? "#16a34a" : ""
+                }}
               >
-                🛒 Add to Cart
+                {addedFeedback ? "✓ Added to Cart!" : "🛒 Add to Cart"}
               </button>
 
               <button

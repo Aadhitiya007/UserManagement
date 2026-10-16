@@ -19,7 +19,7 @@ function Navbar() {
   return (
     <header className="navbar">
       <Link to="/products" className="navbar-brand">
-        🛒 Student Shop
+        🛒 shopiee
       </Link>
 
       <nav className="navbar-links">

@@ -5,7 +5,7 @@ const s3 = require("../config/s3");
 
 exports.getProducts = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, page, limit } = req.query;
     let query = {};
 
     if (search) {
@@ -17,6 +17,25 @@ exports.getProducts = async (req, res) => {
           { description: searchRegex }
         ]
       };
+    }
+
+    if (page) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 12;
+      const skip = (pageNum - 1) * limitNum;
+
+      const total = await Product.countDocuments(query);
+      const products = await Product.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+
+      return res.json({
+        products,
+        total,
+        page: pageNum,
+        totalPages: Math.ceil(total / limitNum)
+      });
     }
 
     const products = await Product.find(query).sort({ createdAt: -1 });
@@ -60,7 +79,9 @@ if (req.file) {
 
   await s3.send(command);
 
-  image = fileName;
+  image = process.env.AWS_S3_BUCKET_NAME && process.env.AWS_REGION
+    ? `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`
+    : fileName;
 } else if (req.body.image) {
   image = req.body.image;
 }
@@ -107,7 +128,9 @@ exports.updateProduct = async (req, res) => {
 
   await s3.send(command);
 
-  product.image = fileName;
+  product.image = process.env.AWS_S3_BUCKET_NAME && process.env.AWS_REGION
+    ? `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`
+    : fileName;
 } else if (req.body.image) {
   product.image = req.body.image;
 }
