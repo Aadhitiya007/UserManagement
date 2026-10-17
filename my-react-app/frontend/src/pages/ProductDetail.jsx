@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
-import OrderSuccessModal from "../components/OrderSuccessModal";
 import { API_URL } from "../config/api";
 import { throttle } from "../utils/throttle";
 
@@ -12,7 +11,6 @@ function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [placedOrder, setPlacedOrder] = useState(null);
   const [buying, setBuying] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState(false);
 
@@ -186,8 +184,8 @@ function ProductDetail() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to place order");
-      setPlacedOrder(data.order || data);
-      checkPurchaseEligibility(); // Grant review access after purchase!
+      const orderId = data.order?._id || data.order?.id;
+      navigate(`/payment/${orderId}`);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -332,13 +330,6 @@ function ProductDetail() {
                 {buying ? "Processing..." : "⚡ Buy Now"}
               </button>
             </div>
-
-            {/* Success Pop-up Modal */}
-            <OrderSuccessModal
-              order={placedOrder}
-              isOpen={Boolean(placedOrder)}
-              onClose={() => setPlacedOrder(null)}
-            />
           </div>
         </div>
 

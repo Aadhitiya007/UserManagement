@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
-import OrderSuccessModal from "../components/OrderSuccessModal";
 import { API_URL } from "../config/api";
 
 function Cart() {
@@ -10,7 +9,6 @@ function Cart() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
-  const [placedOrder, setPlacedOrder] = useState(null);
 
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -19,7 +17,6 @@ function Cart() {
 
     const token = localStorage.getItem("token");
     if (!token) {
-      
       navigate("/login");
       return;
     }
@@ -45,11 +42,9 @@ function Cart() {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          products: orderProducts,
-          totalAmount
+          products: orderProducts
         })
       });
-      
 
       const data = await res.json();
 
@@ -58,7 +53,8 @@ function Cart() {
       }
 
       clearCart();
-      setPlacedOrder(data.order || data);
+      const orderId = data.order?._id || data.order?.id;
+      navigate(`/payment/${orderId}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -165,11 +161,6 @@ function Cart() {
                 <span>Total Amount:</span>
                 <span style={{ color: "#2563eb" }}>₹{totalAmount}</span>
               </div>
-<OrderSuccessModal
-  order={placedOrder}
-  isOpen={Boolean(placedOrder)}
-  onClose={() => setPlacedOrder(null)}
-/>
 
               <button
                 onClick={handleCheckout}
