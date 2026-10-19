@@ -18,6 +18,7 @@ import AddProduct from "./pages/admin/AddProduct";
 import EditProduct from "./pages/admin/EditProduct";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminUsers from "./pages/admin/AdminUsers";
+import AdminReviews from "./pages/admin/AdminReviews";
 
 import {useEffect} from "react";
 import {io} from "socket.io-client";
@@ -75,11 +76,7 @@ function App() {
           />
           <Route
             path="/payment/failure"
-            element={
-              <ProtectedRoute>
-                <PaymentFailure />
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/cart" replace />}
           />
 
           {/* Admin Protected Routes */}
@@ -136,6 +133,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
                 <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/reviews"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminReviews />
               </ProtectedRoute>
             }
           />

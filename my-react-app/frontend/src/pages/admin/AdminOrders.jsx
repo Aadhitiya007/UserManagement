@@ -24,6 +24,11 @@ function AdminOrders() {
     socket.emit("joinAdminRoom");
 
     socket.on("orderStatusUpdated", (data) => {
+      if (data.cancelled) {
+        setOrders((prevOrders) => prevOrders.filter((ord) => ord._id !== data.orderId));
+        return;
+      }
+
       setOrders((prevOrders) =>
         prevOrders.map((ord) =>
           ord._id === data.orderId

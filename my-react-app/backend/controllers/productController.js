@@ -222,3 +222,73 @@ exports.createProductReview = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.getAllReviews = async (req, res) => {
+  try {
+    const products = await Product.find({ "reviews.0": { $exists: true } });
+    const allReviews = [];
+
+    products.forEach((product) => {
+      if (Array.isArray(product.reviews)) {
+        product.reviews.forEach((review) => {
+          allReviews.push({
+            _id: review._id,
+            productId: product._id,
+            productName: product.name,
+            productImage: product.image,
+            userId: review.userId,
+            userName: review.userName,
+            rating: review.rating,
+            comment: review.comment,
+            createdAt: review.createdAt
+          });
+        });
+      }
+    });
+
+    // Sort newest first
+    allReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json(allReviews);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.deleteProductReview = async (req, res) => {
+  try {
+    const { productId, reviewId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const reviewExists = product.reviews.some((r) => r._id.toString() === reviewId);
+    if (!reviewExists) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    // Filter out the review
+    product.reviews = product.reviews.filter((r) => r._id.toString() !== reviewId);
+    product.reviewsCount = product.reviews.length;
+
+    // Recalculate average rating
+    if (product.reviews.length > 0) {
+      const totalStars = product.reviews.reduce((sum, item) => sum + item.rating, 0);
+      product.rating = Math.round((totalStars / product.reviews.length) * 10) / 10;
+    } else {
+      product.rating = 0;
+    }
+
+    await product.save();
+
+    res.json({
+      message: "Review deleted successfully",
+      reviewsCount: product.reviewsCount,
+      rating: product.rating
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

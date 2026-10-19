@@ -42,7 +42,8 @@ function Cart() {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          products: orderProducts
+          products: orderProducts,
+          totalAmount: totalAmount
         })
       });
 
@@ -52,7 +53,7 @@ function Cart() {
         throw new Error(data.message || "Failed to place order");
       }
 
-      clearCart();
+      // Retain cart items until payment succeeds so user can return to cart safely
       const orderId = data.order?._id || data.order?.id;
       navigate(`/payment/${orderId}`);
     } catch (err) {

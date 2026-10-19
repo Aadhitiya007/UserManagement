@@ -139,9 +139,19 @@ function EditProduct() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     className="form-control"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => {
+                      if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || parseFloat(val) >= 0) {
+                        setPrice(val);
+                      }
+                    }}
                     required
                   />
                 </div>
@@ -150,9 +160,19 @@ function EditProduct() {
                   <label>Stock Quantity *</label>
                   <input
                     type="number"
+                    min="0"
                     className="form-control"
                     value={stock}
-                    onChange={(e) => setStock(e.target.value)}
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => {
+                      if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || parseInt(val, 10) >= 0) {
+                        setStock(val);
+                      }
+                    }}
                     required
                   />
                 </div>

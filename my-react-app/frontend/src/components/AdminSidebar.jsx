@@ -11,14 +11,14 @@ function AdminSidebar() {
         <NavLink to="/admin/products" className={({ isActive }) => (isActive ? "active" : "")}>
           📦 Products
         </NavLink>
-        <NavLink to="/admin/products/add" className={({ isActive }) => (isActive ? "active" : "")}>
-          ➕ Add Product
-        </NavLink>
         <NavLink to="/admin/orders" className={({ isActive }) => (isActive ? "active" : "")}>
           🛒 Customer Orders
         </NavLink>
         <NavLink to="/admin/users" className={({ isActive }) => (isActive ? "active" : "")}>
           👥 Users
+        </NavLink>
+        <NavLink to="/admin/reviews" className={({ isActive }) => (isActive ? "active" : "")}>
+          ⭐ Reviews
         </NavLink>
       </nav>
     </aside>

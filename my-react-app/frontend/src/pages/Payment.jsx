@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useCart } from "../context/CartContext";
 import { API_URL } from "../config/api";
 
 function Payment() {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const { clearCart } = useCart();
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,7 @@ function Payment() {
     }
   }
 
-  async function handleSimulate(shouldSucceed) {
+  async function handleCompletePayment() {
     const token = localStorage.getItem("token");
     if (!token) {
       navigate("/login");
@@ -72,21 +74,46 @@ function Payment() {
         },
         body: JSON.stringify({
           orderId,
-          shouldSucceed,
+          shouldSucceed: true,
           paymentMethod
         })
       });
 
       const data = await res.json();
-
-      if (shouldSucceed) {
-        navigate(`/payment/success?orderId=${orderId}`);
-      } else {
-        navigate(`/payment/failure?orderId=${orderId}`);
+      if (!res.ok) {
+        throw new Error(data.message || "Payment simulation failed");
       }
+
+      // Clear cart items on payment success
+      clearCart();
+
+      navigate(`/payment/success?orderId=${orderId}`);
     } catch (err) {
       setError(err.message || "An error occurred during payment processing");
       setProcessing(false);
+    }
+  }
+
+  async function handleCancelToCart() {
+    const token = localStorage.getItem("token");
+    try {
+      setProcessing(true);
+      setError("");
+
+      // Restore reserved stock and delete the pending order from the backend
+      await fetch(`${API_URL}/api/payment/cancel`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ orderId })
+      });
+    } catch (err) {
+      console.error("Error cancelling order:", err);
+    } finally {
+      // Cart items remain untouched in CartContext/localStorage
+      navigate("/cart");
     }
   }
 
@@ -108,8 +135,7 @@ function Payment() {
           color: "#1e40af",
           fontSize: "0.9rem"
         }}>
-          <span style={{ fontSize: "1.2rem" }}>🧪</span>
-          <span><strong>Testing Mode:</strong> This is a simulated payment gateway. No real money or card details are required.</span>
+          
         </div>
 
         {error && (
@@ -244,7 +270,7 @@ function Payment() {
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <button
                 type="button"
-                onClick={() => handleSimulate(true)}
+                onClick={handleCompletePayment}
                 className="btn btn-primary"
                 style={{
                   padding: "14px",
@@ -255,32 +281,17 @@ function Payment() {
                 }}
                 disabled={processing}
               >
-                {processing ? "Simulating Transaction..." : `🟢 Simulate Payment Success (₹${order.totalAmount})`}
+                {processing ? "Processing Payment..." : `🟢 Complete Payment (₹${order.totalAmount})`}
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSimulate(false)}
-                className="btn btn-outline"
-                style={{
-                  padding: "12px",
-                  color: "#dc2626",
-                  borderColor: "#fca5a5",
-                  fontWeight: "500"
-                }}
-                disabled={processing}
-              >
-                🔴 Simulate Payment Failure (Bank Decline)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate("/cart")}
+                onClick={handleCancelToCart}
                 className="btn"
                 style={{ background: "transparent", color: "#64748b", marginTop: "4px" }}
                 disabled={processing}
               >
-                Cancel and return to Cart
+                {processing ? "Cancelling..." : "Cancel and return to Cart"}
               </button>
             </div>
 

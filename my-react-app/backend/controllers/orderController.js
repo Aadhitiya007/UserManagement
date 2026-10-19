@@ -95,7 +95,7 @@ exports.createOrder = async (req, res) => {
       userName: req.user.name || "Customer",
       userEmail: req.user.email,
       products: validatedProducts,
-      totalAmount: calculatedTotal,
+      totalAmount: Number(calculatedTotal || req.body.totalAmount || 0),
       status: "Pending",
       paymentStatus: "Pending"
     });

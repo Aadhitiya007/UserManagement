@@ -78,17 +78,17 @@ function AdminDashboard() {
               <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                 <h3 style={{ marginBottom: "15px" }}>Quick Actions</h3>
                 <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-                  <Link to="/admin/products/add" className="btn btn-primary">
-                    ➕ Add New Product
-                  </Link>
-                  <Link to="/admin/products" className="btn btn-outline">
-                    📦 Manage Products
+                  <Link to="/admin/products" className="btn btn-primary">
+                    📦 Products
                   </Link>
                   <Link to="/admin/orders" className="btn btn-outline">
-                    🛒 Manage Customer Orders
+                    🛒 Customer Orders
                   </Link>
                   <Link to="/admin/users" className="btn btn-outline">
-                    👥 View Users
+                    👥 Users
+                  </Link>
+                  <Link to="/admin/reviews" className="btn btn-outline">
+                    ⭐ Reviews
                   </Link>
                 </div>
               </div>

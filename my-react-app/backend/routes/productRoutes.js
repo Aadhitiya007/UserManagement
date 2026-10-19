@@ -10,8 +10,13 @@ const {
   updateProduct,
   deleteProduct,
   checkPurchaseEligibility,
-  createProductReview
+  createProductReview,
+  getAllReviews,
+  deleteProductReview
 } = require("../controllers/productController");
+
+router.get("/reviews/all", verifyToken, requireAdmin, getAllReviews);
+router.delete("/:productId/reviews/:reviewId", verifyToken, requireAdmin, deleteProductReview);
 
 router.get("/", getProducts);
 router.get("/:id", getProductById);
