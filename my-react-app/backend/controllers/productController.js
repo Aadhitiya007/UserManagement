@@ -9,7 +9,8 @@ exports.getProducts = async (req, res) => {
     let query = {};
 
     if (search) {
-      const searchRegex = new RegExp(search, "i");
+      const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(sanitizedSearch, "i");
       query = {
         $or: [
           { name: searchRegex },
@@ -159,6 +160,7 @@ exports.checkPurchaseEligibility = async (req, res) => {
     const hasPurchased = await Order.findOne({
       userId: req.user.id,
       "products.productId": req.params.id,
+      paymentStatus: "Paid",
       status: { $ne: "Cancelled" }
     });
 
@@ -184,12 +186,13 @@ exports.createProductReview = async (req, res) => {
     const hasPurchased = await Order.findOne({
       userId: req.user.id,
       "products.productId": req.params.id,
+      paymentStatus: "Paid",
       status: { $ne: "Cancelled" }
     });
 
     if (!hasPurchased) {
       return res.status(403).json({
-        message: "Only verified buyers who purchased this product can submit a review."
+        message: "Only verified buyers with completed payment can submit a review."
       });
     }
 

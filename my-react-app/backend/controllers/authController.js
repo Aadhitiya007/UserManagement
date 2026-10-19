@@ -2,11 +2,16 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET environment variable is missing.");
+  }
+  return process.env.JWT_SECRET;
+};
 
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role, age, country, phone } = req.body;
+    const { name, email, password, age, country, phone } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Name, email, and password are required" });
@@ -19,11 +24,12 @@ exports.register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Security fix: Force role to "user" to prevent privilege escalation
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
-      role: role || "user",
+      role: "user",
       age,
       country,
       phone
@@ -31,7 +37,7 @@ exports.register = async (req, res) => {
 
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role, name: user.name },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: "7d" }
     );
 
@@ -70,7 +76,7 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role, name: user.name },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: "7d" }
     );
 

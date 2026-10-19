@@ -47,10 +47,26 @@ const io = new Server(server, {
 app.set("io", io);
 
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  // Scoped room for specific user notifications
+  socket.on("joinUserRoom", (userId) => {
+    if (userId) {
+      socket.join(`user_${userId}`);
+    }
+  });
+
+  // Scoped room for specific order notifications
+  socket.on("joinOrderRoom", (orderId) => {
+    if (orderId) {
+      socket.join(`order_${orderId}`);
+    }
+  });
+
+  // Scoped room for admin notifications
+  socket.on("joinAdminRoom", () => {
+    socket.join("admins");
+  });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
   });
 });
 
