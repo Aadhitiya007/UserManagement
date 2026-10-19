@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { io } from "socket.io-client";
 import Navbar from "../../components/Navbar";
 import AdminSidebar from "../../components/AdminSidebar";
 import { API_URL } from "../../config/api";
@@ -18,6 +19,23 @@ function AdminOrders() {
 
   useEffect(() => {
     fetchOrders();
+
+    const socket = io(API_URL);
+    socket.emit("joinAdminRoom");
+
+    socket.on("orderStatusUpdated", (data) => {
+      setOrders((prevOrders) =>
+        prevOrders.map((ord) =>
+          ord._id === data.orderId
+            ? { ...ord, status: data.status, paymentStatus: data.paymentStatus || ord.paymentStatus }
+            : ord
+        )
+      );
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   async function fetchOrders() {

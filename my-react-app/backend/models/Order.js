@@ -45,6 +45,15 @@ const orderSchema = new mongoose.Schema(
       paidAt: { type: Date },
       failureReason: { type: String }
     },
+    paymentAttempts: [
+      {
+        attemptId: { type: String, required: true },
+        method: { type: String, default: "Card" },
+        status: { type: String, enum: ["Success", "Failed"], required: true },
+        failureReason: { type: String },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );

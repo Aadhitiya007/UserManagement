@@ -17,6 +17,12 @@ function Orders() {
 
     const socket = io(API_URL);
 
+    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const userId = storedUser.id || storedUser._id;
+    if (userId) {
+      socket.emit("joinUserRoom", userId);
+    }
+
     socket.on("orderStatusUpdated", (data) => {
       console.log("Order status updated:", data);
 

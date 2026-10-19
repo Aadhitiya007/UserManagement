@@ -6,7 +6,8 @@ exports.getUsers = async (req, res) => {
     let query = {};
 
     if (search) {
-      const searchRegex = new RegExp(search, "i");
+      const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(sanitizedSearch, "i");
       query = {
         $or: [
           { name: searchRegex },

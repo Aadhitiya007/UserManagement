@@ -25,6 +25,7 @@ exports.getOrderPaymentStatus = async (req, res) => {
       paymentStatus: order.paymentStatus || "Pending",
       paymentMethod: order.paymentMethod || "Card",
       paymentDetails: order.paymentDetails || {},
+      paymentAttempts: order.paymentAttempts || [],
       products: order.products,
       createdAt: order.createdAt
     });
@@ -55,7 +56,14 @@ exports.simulatePayment = async (req, res) => {
       return res.status(403).json({ message: "Access denied. Not your order." });
     }
 
-    // Idempotency: Prevent re-processing an already paid order
+    // Rule: Reject payment attempts for cancelled orders
+    if (order.status === "Cancelled") {
+      return res.status(400).json({
+        message: "Cannot process payment for a cancelled order."
+      });
+    }
+
+    // Rule: Idempotency - Prevent duplicate successful processing of an already paid order
     if (order.paymentStatus === "Paid") {
       return res.status(200).json({
         success: true,
@@ -64,54 +72,91 @@ exports.simulatePayment = async (req, res) => {
       });
     }
 
+    // Generate a unique internal payment-attempt ID
+    const attemptId = `ATTEMPT_${Date.now()}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const selectedMethod = paymentMethod || "Card";
+
     // Outcome 1: Payment Succeeded
     if (shouldSucceed) {
       order.paymentStatus = "Paid";
       order.status = "Processing"; // Advance from Pending to Processing
-      order.paymentMethod = paymentMethod || "Card";
+      order.paymentMethod = selectedMethod;
       order.paymentDetails = {
-        transactionId: `TXN_${Date.now()}`,
+        transactionId: attemptId,
         paidAt: new Date()
       };
+
+      // Record in attempt history
+      order.paymentAttempts.push({
+        attemptId,
+        method: selectedMethod,
+        status: "Success",
+        createdAt: new Date()
+      });
+
       await order.save();
 
-      // Emit real-time Socket.io update
+      // Emit real-time Socket.io update to scoped rooms
       const io = req.app.get("io");
       if (io) {
-        io.emit("orderStatusUpdated", {
+        const payload = {
           orderId: order._id,
           status: order.status,
           paymentStatus: order.paymentStatus
-        });
+        };
+        io.to(`order_${order._id}`)
+          .to(`user_${order.userId}`)
+          .to("admins")
+          .emit("orderStatusUpdated", payload);
+        io.emit("orderStatusUpdated", payload);
       }
 
       return res.status(200).json({
         success: true,
         message: "Payment simulated successfully",
+        attemptId,
         order
       });
     }
 
     // Outcome 2: Payment Failed
+    const failureReason = "Simulated issuer decline (Test simulation failure)";
     order.paymentStatus = "Failed";
-    order.paymentMethod = paymentMethod || "Card";
+    order.paymentMethod = selectedMethod;
     order.paymentDetails = {
-      failureReason: "Simulated test decline (Bank server rejected payment)"
+      transactionId: attemptId,
+      failureReason
     };
+
+    // Preserve the order and record failed attempt in attempt history
+    order.paymentAttempts.push({
+      attemptId,
+      method: selectedMethod,
+      status: "Failed",
+      failureReason,
+      createdAt: new Date()
+    });
+
     await order.save();
 
     const io = req.app.get("io");
     if (io) {
-      io.emit("orderStatusUpdated", {
+      const payload = {
         orderId: order._id,
         status: order.status,
         paymentStatus: order.paymentStatus
-      });
+      };
+      io.to(`order_${order._id}`)
+        .to(`user_${order.userId}`)
+        .to("admins")
+        .emit("orderStatusUpdated", payload);
+      io.emit("orderStatusUpdated", payload);
     }
 
     return res.status(400).json({
       success: false,
       message: "Payment failed as requested in simulation",
+      attemptId,
       order
     });
   } catch (error) {
@@ -127,6 +172,10 @@ exports.retryPayment = async (req, res) => {
   try {
     const { orderId } = req.body;
 
+    if (!orderId) {
+      return res.status(400).json({ message: "Order ID is required" });
+    }
+
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -137,11 +186,17 @@ exports.retryPayment = async (req, res) => {
       return res.status(403).json({ message: "Access denied. Not your order." });
     }
 
-    if (order.paymentStatus === "Paid") {
-      return res.status(400).json({ message: "Cannot retry an order that is already paid" });
+    // Reject retry if order is cancelled
+    if (order.status === "Cancelled") {
+      return res.status(400).json({ message: "Cannot retry payment for a cancelled order." });
     }
 
-    // Reset status to Pending for retry
+    // Reject retry if order is already paid
+    if (order.paymentStatus === "Paid") {
+      return res.status(400).json({ message: "Cannot retry an order that is already paid." });
+    }
+
+    // Reset status to Pending for retry (preserving existing paymentAttempts history)
     order.paymentStatus = "Pending";
     await order.save();
 
