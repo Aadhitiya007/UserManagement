@@ -12,4 +12,7 @@ router.post("/simulate", verifyToken, paymentController.simulatePayment);
 // Retry payment on an existing unpaid order
 router.post("/retry", verifyToken, paymentController.retryPayment);
 
+// Cancel an unpaid checkout session and restore stock
+router.post("/cancel", verifyToken, paymentController.cancelPendingPayment);
+
 module.exports = router;

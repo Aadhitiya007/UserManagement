@@ -26,6 +26,13 @@ function Orders() {
     socket.on("orderStatusUpdated", (data) => {
       console.log("Order status updated:", data);
 
+      if (data.cancelled) {
+        setOrders((currentOrders) =>
+          currentOrders.filter((order) => order._id !== data.orderId)
+        );
+        return;
+      }
+
       setOrders((currentOrders) =>
         currentOrders.map((order) =>
           order._id === data.orderId
