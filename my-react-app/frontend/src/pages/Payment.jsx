@@ -121,22 +121,6 @@ function Payment() {
     <>
       <Navbar />
       <div className="container" style={{ maxWidth: "700px", margin: "40px auto" }}>
-        
-        {/* Development Notice */}
-        <div style={{
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          borderRadius: "8px",
-          padding: "12px 16px",
-          marginBottom: "24px",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          color: "#1e40af",
-          fontSize: "0.9rem"
-        }}>
-          
-        </div>
 
         {error && (
           <div style={{ padding: "12px", background: "#fee2e2", color: "#991b1b", borderRadius: "6px", marginBottom: "20px" }}>
