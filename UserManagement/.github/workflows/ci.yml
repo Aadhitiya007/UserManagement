@@ -3,16 +3,18 @@ name: MERN Project CI
 
 on:
   push:
+    branches: [master]
   pull_request:
+    branches: [master]
 
 jobs:
   frontend-ci:
-    name: Frontend Checks
+    name: Frontend Lint and Build
     runs-on: ubuntu-latest
 
     defaults:
       run:
-        working-directory: frontend
+        working-directory: my-react-app/frontend
 
     steps:
       - name: Checkout repository
@@ -22,9 +24,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: my-react-app/frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run ESLint
         run: npm run lint
@@ -33,12 +37,12 @@ jobs:
         run: npm run build
 
   backend-ci:
-    name: Backend Checks
+    name: Backend Syntax Check
     runs-on: ubuntu-latest
 
     defaults:
       run:
-        working-directory: backend
+        working-directory: my-react-app/backend
 
     steps:
       - name: Checkout repository
@@ -48,9 +52,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: my-react-app/backend/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Check server syntax
         run: node --check server.js
