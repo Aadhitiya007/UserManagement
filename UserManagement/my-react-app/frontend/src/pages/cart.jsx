@@ -5,7 +5,7 @@ import { useCart } from "../context/CartContext";
 import { API_URL } from "../config/api";
 
 function Cart() {
-  const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { cart, updateQuantity, removeFromCart } = useCart();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
