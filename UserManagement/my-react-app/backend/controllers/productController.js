@@ -2,6 +2,8 @@ const Product = require("../models/Product");
 const Order = require("../models/Order");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const s3 = require("../config/s3");
+const fs = require("fs");
+const path = require("path");
 
 exports.getProducts = async (req, res) => {
   try {
@@ -19,7 +21,7 @@ exports.getProducts = async (req, res) => {
         ]
       };
     }
-
+//pagination
     if (page) {
       const pageNum = parseInt(page, 10) || 1;
       const limitNum = parseInt(limit, 10) || 12;
@@ -58,6 +60,50 @@ exports.getProductById = async (req, res) => {
   }
 };
 
+// Helper: Upload to S3 with local disk fallback and error logging
+async function processProductImage(file) {
+  const cleanName = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
+  const fileName = `products/${cleanName}`;
+  let image = "";
+  let uploadSource = "s3";
+  let s3Error = null;
+
+  try {
+  // processProductImage command
+  const command = new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: fileName,
+      Body: file.buffer,
+      ContentType: file.mimetype
+    });
+
+    await s3.send(command);
+
+    image = process.env.AWS_S3_BUCKET_NAME && process.env.AWS_REGION
+      ? `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`
+      : fileName;
+    uploadSource = "s3";
+    console.log("✓ AWS S3 Upload Successful:", image);
+  } catch (err) {
+    s3Error = err.message;
+    uploadSource = "local";
+    console.error("❌ AWS S3 Upload Failed:", err.message);
+    console.warn("⚠️ S3 error detected! Falling back to local disk storage (uploads/products)...");
+
+    const localDir = path.join(__dirname, "..", "uploads", "products");
+    if (!fs.existsSync(localDir)) {
+      fs.mkdirSync(localDir, { recursive: true });
+    }
+    const localPath = path.join(localDir, cleanName);
+    await fs.promises.writeFile(localPath, file.buffer);
+
+    image = `uploads/products/${cleanName}`;
+    console.log("✓ Saved image to local server storage:", image);
+  }
+
+  return { image, uploadSource, s3Error };
+}
+
 exports.createProduct = async (req, res) => {
   try {
     const { name, description, price, category, stock } = req.body;
@@ -67,25 +113,18 @@ exports.createProduct = async (req, res) => {
     }
 
     let image = "";
+    let uploadSource = "none";
+    let s3Error = null;
 
-if (req.file) {
-  const fileName = `products/${Date.now()}-${req.file.originalname}`;
-
-  const command = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET_NAME,
-    Key: fileName,
-    Body: req.file.buffer,
-    ContentType: req.file.mimetype
-  });
-
-  await s3.send(command);
-
-  image = process.env.AWS_S3_BUCKET_NAME && process.env.AWS_REGION
-    ? `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`
-    : fileName;
-} else if (req.body.image) {
-  image = req.body.image;
-}
+    if (req.file) {
+      const result = await processProductImage(req.file);
+      image = result.image;
+      uploadSource = result.uploadSource;
+      s3Error = result.s3Error;
+    } else if (req.body.image) {
+      image = req.body.image;
+      uploadSource = "url";
+    }
 
     const product = await Product.create({
       name,
@@ -96,7 +135,12 @@ if (req.file) {
       image
     });
 
-    res.status(201).json({ message: "Product created successfully", product });
+    res.status(201).json({
+      message: "Product created successfully",
+      product,
+      uploadSource,
+      s3Error
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -117,27 +161,26 @@ exports.updateProduct = async (req, res) => {
     if (category) product.category = category;
     if (stock !== undefined) product.stock = Number(stock);
 
+    let uploadSource = "none";
+    let s3Error = null;
+
     if (req.file) {
-  const fileName = `products/${Date.now()}-${req.file.originalname}`;
-
-  const command = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET_NAME,
-    Key: fileName,
-    Body: req.file.buffer,
-    ContentType: req.file.mimetype
-  });
-
-  await s3.send(command);
-
-  product.image = process.env.AWS_S3_BUCKET_NAME && process.env.AWS_REGION
-    ? `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`
-    : fileName;
-} else if (req.body.image) {
-  product.image = req.body.image;
-}
+      const result = await processProductImage(req.file);
+      product.image = result.image;
+      uploadSource = result.uploadSource;
+      s3Error = result.s3Error;
+    } else if (req.body.image) {
+      product.image = req.body.image;
+      uploadSource = "url";
+    }
 
     await product.save();
-    res.json({ message: "Product updated successfully", product });
+    res.json({
+      message: "Product updated successfully",
+      product,
+      uploadSource,
+      s3Error
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

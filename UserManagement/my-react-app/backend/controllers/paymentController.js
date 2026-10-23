@@ -1,10 +1,7 @@
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 
-/**
- * 1. Get Payment & Order Status (for verification on Payment & Success pages)
- * GET /api/payment/:orderId
- */
+
 exports.getOrderPaymentStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
