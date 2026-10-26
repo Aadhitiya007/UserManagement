@@ -125,14 +125,7 @@ function ProductDetail() {
     );
   }
 
-  const rawImg = product.image ? encodeURI(product.image) : "";
-  const imageUrl = rawImg
-    ? (rawImg.startsWith("http")
-        ? rawImg
-        : rawImg.startsWith("products/")
-          ? `https://my-ecommerce-product-images-2026.s3.ap-southeast-2.amazonaws.com/${rawImg}`
-          : `${API_URL}/${rawImg.replace(/^\//, "")}`)
-    : "https://via.placeholder.com/400x300?text=No+Image";
+  const imageUrl = product.imageUrl || product.image || "https://via.placeholder.com/400x300?text=No+Image";
 
   const isOutOfStock = product.stock <= 0;
 

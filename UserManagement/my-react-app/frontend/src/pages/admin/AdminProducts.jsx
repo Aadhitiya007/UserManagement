@@ -113,9 +113,10 @@ function AdminProducts() {
                   </thead>
                   <tbody>
                     {paginatedProducts.map((product) => {
-                      const imageUrl = product.image
-                        ? (product.image.startsWith("http") ? product.image : `${API_URL}${product.image}`)
-                        : "https://via.placeholder.com/50";
+                      const imageUrl =
+                        product.imageUrl ||
+                        product.image ||
+                        "https://via.placeholder.com/100x100?text=No+Image";
 
                       return (
                         <tr key={product._id}>

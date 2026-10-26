@@ -33,7 +33,7 @@ function EditProduct() {
         setPrice(data.price || "");
         setCategory(data.category || "Electronics");
         setStock(data.stock || 0);
-        setCurrentImage(data.image || "");
+        setCurrentImage(data.imageUrl || data.image || "");
       } catch (err) {
         setError(err.message);
       } finally {
@@ -93,7 +93,7 @@ function EditProduct() {
   if (loading) return <><Navbar /><div className="admin-layout"><AdminSidebar /><main className="admin-content"><p>Loading product details...</p></main></div></>;
 
   const displayImage = imagePreview || (currentImage
-    ? (currentImage.startsWith("http") ? currentImage : `${API_URL}${currentImage}`)
+    ? (currentImage.startsWith("http") || currentImage.startsWith("data:") ? currentImage : `${API_URL}/${currentImage.replace(/^\//, "")}`)
     : "");
 
   return (

@@ -1,9 +1,151 @@
 const Product = require("../models/Product");
 const Order = require("../models/Order");
-const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const {
+  PutObjectCommand,
+  GetObjectCommand
+} = require("@aws-sdk/client-s3");
+const {
+  getSignedUrl
+} = require("@aws-sdk/s3-request-presigner");
 const s3 = require("../config/s3");
 const fs = require("fs");
 const path = require("path");
+
+// In-memory cache for presigned URLs: key -> { url, expiresAt }
+const presignedCache = new Map();
+
+/**
+ * Converts a stored S3 object key or legacy URL into a temporary presigned URL.
+ * Handles private S3 objects while retaining compatibility with existing
+ * Base64 images, local upload paths, and external image URLs.
+ */
+async function getProductWithImageUrl(product) {
+  if (!product) return product;
+
+  const item =
+    typeof product.toObject === "function"
+      ? product.toObject()
+      : { ...product };
+
+  const image =
+    typeof item.image === "string"
+      ? item.image.trim()
+      : "";
+
+  // Default: preserve the stored image value
+  item.imageUrl = image;
+
+  // Empty or Base64 images do not need S3 signing
+  if (!image || image.startsWith("data:") || image.startsWith("blob:")) {
+    return item;
+  }
+
+  // Local fallback uploads
+  if (image.startsWith("uploads/")) {
+    item.imageUrl = `/${image}`;
+    return item;
+  }
+  if (image.startsWith("/uploads/")) {
+    item.imageUrl = image;
+    return item;
+  }
+
+  const bucketName = typeof s3.getBucketName === "function"
+    ? s3.getBucketName()
+    : (process.env.AWS_S3_BUCKET_NAME || "");
+
+  const region = typeof s3.getRegion === "function"
+    ? s3.getRegion()
+    : (process.env.AWS_REGION || "ap-south-2");
+
+  let key = "";
+
+  // New canonical format: products/filename.jpg
+  if (image.startsWith("products/")) {
+    key = image.replace(/\.\./g, "");
+  } else if (image.startsWith("http://") || image.startsWith("https://")) {
+    try {
+      const parsed = new URL(image);
+
+      const isConfiguredBucket =
+        bucketName &&
+        (
+          parsed.hostname === `${bucketName}.s3.${region}.amazonaws.com` ||
+          parsed.hostname === `${bucketName}.s3.amazonaws.com` ||
+          parsed.hostname.startsWith(`${bucketName}.s3.`) ||
+          parsed.hostname.includes(bucketName)
+        );
+
+      if (isConfiguredBucket) {
+        key = decodeURIComponent(
+          parsed.pathname.replace(/^\/+/, "")
+        ).replace(/\.\./g, "");
+      } else if (parsed.hostname.includes(".s3.") || parsed.hostname.includes(".amazonaws.com")) {
+        const pathname = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
+        if (pathname.startsWith("products/")) {
+          key = pathname.replace(/\.\./g, "");
+        } else {
+          item.imageUrl = "";
+        }
+      }
+    } catch {
+      // Keep the original URL if parsing fails
+    }
+  }
+
+  if (key && bucketName) {
+    try {
+      const now = Date.now();
+      const cached = presignedCache.get(key);
+      if (cached && cached.expiresAt > now) {
+        item.imageUrl = cached.url;
+        item.image = cached.url;
+        return item;
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+
+      const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+
+      // Cache for 50 minutes (safety buffer before 60-min expiry)
+      presignedCache.set(key, {
+        url: signedUrl,
+        expiresAt: now + 50 * 60 * 1000
+      });
+
+      item.imageUrl = signedUrl;
+      item.image = signedUrl;
+    } catch (error) {
+      console.warn(`Unable to sign S3 image URL for key "${key}":`, error.message);
+      item.imageUrl = "";
+    }
+  } else if (key && !bucketName) {
+    item.imageUrl = "";
+  }
+
+  return item;
+}
+
+/**
+ * Applies the presigned URL helper across an array of products.
+ */
+async function getProductsWithImageUrls(products) {
+  if (!Array.isArray(products)) return [];
+  return Promise.all(products.map(getProductWithImageUrl));
+}
+
+// Periodic cleanup of expired cache entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of presignedCache.entries()) {
+    if (value.expiresAt <= now) {
+      presignedCache.delete(key);
+    }
+  }
+}, 15 * 60 * 1000).unref();
 
 exports.getProducts = async (req, res) => {
   try {
@@ -21,28 +163,32 @@ exports.getProducts = async (req, res) => {
         ]
       };
     }
-//pagination
+
+    // Pagination
     if (page) {
       const pageNum = parseInt(page, 10) || 1;
       const limitNum = parseInt(limit, 10) || 12;
       const skip = (pageNum - 1) * limitNum;
 
       const total = await Product.countDocuments(query);
-      const products = await Product.find(query)
+      const rawProducts = await Product.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum);
 
+      const productsWithImageUrls = await getProductsWithImageUrls(rawProducts);
+
       return res.json({
-        products,
+        products: productsWithImageUrls,
         total,
         page: pageNum,
         totalPages: Math.ceil(total / limitNum)
       });
     }
 
-    const products = await Product.find(query).sort({ createdAt: -1 });
-    res.json(products);
+    const rawProducts = await Product.find(query).sort({ createdAt: -1 });
+    const productsWithImageUrls = await getProductsWithImageUrls(rawProducts);
+    res.json(productsWithImageUrls);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -54,24 +200,32 @@ exports.getProductById = async (req, res) => {
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
-    res.json(product);
+    const productWithUrl = await getProductWithImageUrl(product);
+    res.json(productWithUrl);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Helper: Upload to S3 with local disk fallback and error logging
+// Helper: Upload to S3 with local disk fallback and sanitized error logging
 async function processProductImage(file) {
   const cleanName = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
   const fileName = `products/${cleanName}`;
+  const bucketName = typeof s3.getBucketName === "function"
+    ? s3.getBucketName()
+    : (process.env.AWS_S3_BUCKET_NAME || "");
+
   let image = "";
   let uploadSource = "s3";
   let s3Error = null;
 
   try {
-  // processProductImage command
-  const command = new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
+    if (!bucketName || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+      throw new Error("AWS S3 environment variables not configured");
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: bucketName,
       Key: fileName,
       Body: file.buffer,
       ContentType: file.mimetype
@@ -79,16 +233,14 @@ async function processProductImage(file) {
 
     await s3.send(command);
 
-    image = process.env.AWS_S3_BUCKET_NAME && process.env.AWS_REGION
-      ? `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`
-      : fileName;
+    // Store the canonical key in MongoDB, not a public S3 URL
+    image = fileName;
     uploadSource = "s3";
-    console.log("✓ AWS S3 Upload Successful:", image);
+    console.log("✓ AWS S3 Upload Successful. Object Key:", fileName);
   } catch (err) {
-    s3Error = err.message;
+    s3Error = "S3 upload failed, stored locally";
     uploadSource = "local";
-    console.error("❌ AWS S3 Upload Failed:", err.message);
-    console.warn("⚠️ S3 error detected! Falling back to local disk storage (uploads/products)...");
+    console.warn("⚠️ S3 upload unavailable, falling back to local disk storage:", err.message);
 
     const localDir = path.join(__dirname, "..", "uploads", "products");
     if (!fs.existsSync(localDir)) {
@@ -98,7 +250,6 @@ async function processProductImage(file) {
     await fs.promises.writeFile(localPath, file.buffer);
 
     image = `uploads/products/${cleanName}`;
-    console.log("✓ Saved image to local server storage:", image);
   }
 
   return { image, uploadSource, s3Error };
@@ -135,9 +286,11 @@ exports.createProduct = async (req, res) => {
       image
     });
 
+    const productWithUrl = await getProductWithImageUrl(product);
+
     res.status(201).json({
       message: "Product created successfully",
-      product,
+      product: productWithUrl,
       uploadSource,
       s3Error
     });
@@ -175,9 +328,11 @@ exports.updateProduct = async (req, res) => {
     }
 
     await product.save();
+    const productWithUrl = await getProductWithImageUrl(product);
+
     res.json({
       message: "Product updated successfully",
-      product,
+      product: productWithUrl,
       uploadSource,
       s3Error
     });
@@ -260,7 +415,9 @@ exports.createProductReview = async (req, res) => {
     product.rating = Math.round((totalStars / product.reviews.length) * 10) / 10;
 
     await product.save();
-    res.status(201).json({ message: "Review submitted successfully", product });
+    const productWithUrl = await getProductWithImageUrl(product);
+
+    res.status(201).json({ message: "Review submitted successfully", product: productWithUrl });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -271,14 +428,15 @@ exports.getAllReviews = async (req, res) => {
     const products = await Product.find({ "reviews.0": { $exists: true } });
     const allReviews = [];
 
-    products.forEach((product) => {
+    for (const product of products) {
       if (Array.isArray(product.reviews)) {
+        const itemWithUrl = await getProductWithImageUrl(product);
         product.reviews.forEach((review) => {
           allReviews.push({
             _id: review._id,
             productId: product._id,
             productName: product.name,
-            productImage: product.image,
+            productImage: itemWithUrl.imageUrl || itemWithUrl.image,
             userId: review.userId,
             userName: review.userName,
             rating: review.rating,
@@ -287,7 +445,7 @@ exports.getAllReviews = async (req, res) => {
           });
         });
       }
-    });
+    }
 
     // Sort newest first
     allReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -335,3 +493,8 @@ exports.deleteProductReview = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Export helpers for testing and reuse
+exports.getProductWithImageUrl = getProductWithImageUrl;
+exports.getProductsWithImageUrls = getProductsWithImageUrls;
+exports.processProductImage = processProductImage;
