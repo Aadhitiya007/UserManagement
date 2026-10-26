@@ -5,7 +5,7 @@ import { useCart } from "../context/CartContext";
 import { API_URL } from "../config/api";
 
 function Cart() {
-  const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { cart, updateQuantity, removeFromCart } = useCart();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -99,14 +99,7 @@ function Cart() {
                 <tbody>
                   {cart.map((item) => {
                     const id = item._id || item.id;
-                    const rawImg = item.image ? encodeURI(item.image) : "";
-                    const imageUrl = rawImg
-                      ? (rawImg.startsWith("http")
-                          ? rawImg
-                          : rawImg.startsWith("products/")
-                            ? `https://my-ecommerce-product-images-2026.s3.ap-southeast-2.amazonaws.com/${rawImg}`
-                            : `${API_URL}/${rawImg.replace(/^\//, "")}`)
-                      : "https://via.placeholder.com/60";
+                    const imageUrl = item.imageUrl || item.image || "https://via.placeholder.com/100x100?text=No+Image";
 
                     return (
                       <tr key={id}>

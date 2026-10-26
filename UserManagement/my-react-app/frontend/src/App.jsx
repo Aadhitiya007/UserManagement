@@ -8,7 +8,7 @@ import Cart from "./pages/cart";
 import Orders from "./pages/Orders";
 import Payment from "./pages/Payment";
 import PaymentSuccess from "./pages/PaymentSuccess";
-import PaymentFailure from "./pages/PaymentFailure";
+
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
