@@ -116,8 +116,8 @@ cd my-react-app
    PORT=5000
    MONGO_URL=mongodb+srv://<username>:<password>@cluster.mongodb.net/ecommerce
    JWT_SECRET=your_super_secret_jwt_key
-   ADMIN_EMAIL=admin@example.com
-   ADMIN_PASSWORD=admin123
+   ADMIN_EMAIL=user@example.com
+   ADMIN_PASSWORD=user123
 
    # Optional AWS S3 settings
    AWS_ACCESS_KEY_ID=your_access_key
