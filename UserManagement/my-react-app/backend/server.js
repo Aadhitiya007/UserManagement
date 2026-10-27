@@ -4,12 +4,13 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const dns = require("dns");
-const http =require("http");
-const{ Server } = require("socket.io");
+const http = require("http");
+const { Server } = require("socket.io");
+const jwt = require("jsonwebtoken");
 
 require("dotenv").config();
 const s3 = require("./config/s3");
-
+const Order = require("./models/Order");
 
 try {
   dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -30,7 +31,6 @@ const orderRoutes = require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
-
 const server = http.createServer(app);
 
 const allowedOrigins = [
@@ -44,7 +44,6 @@ const allowedOrigins = [
 const isOriginAllowed = (origin) => {
   if (!origin) return true;
   if (allowedOrigins.includes(origin)) return true;
-  // Automatically permit all Vercel production & preview deployments
   if (/^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin)) return true;
   if (/^https:\/\/([a-zA-Z0-9-]+\.)*onrender\.com$/.test(origin)) return true;
   return false;
@@ -79,28 +78,83 @@ const io = new Server(server, {
 });
 app.set("io", io);
 
+// 1. Socket.IO Connection Authentication Middleware (JWT)
+io.use((socket, next) => {
+  const token =
+    socket.handshake.auth?.token ||
+    (socket.handshake.headers?.authorization &&
+      socket.handshake.headers.authorization.split(" ")[1]) ||
+    socket.handshake.query?.token;
+
+  if (!token) {
+    return next(new Error("Authentication error: Token required."));
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    return next(new Error("Server error: JWT secret not configured."));
+  }
+
+  try {
+    const decoded = jwt.verify(token, secret);
+    socket.user = decoded; // { id, email, role, name }
+    next();
+  } catch (err) {
+    return next(new Error("Authentication error: Invalid or expired token."));
+  }
+});
+
+// 2. Scoped & Authorized Room Event Handlers
 io.on("connection", (socket) => {
-  // Scoped room for specific user notifications
+  // Scoped room for specific user notifications - authorized only for that user or an admin
   socket.on("joinUserRoom", (userId) => {
-    if (userId) {
+    if (!socket.user) {
+      return socket.emit("error", { message: "Unauthenticated socket session." });
+    }
+
+    if (socket.user.id === userId || socket.user.role === "admin") {
       socket.join(`user_${userId}`);
+    } else {
+      socket.emit("error", { message: "Unauthorized to join user room." });
     }
   });
 
-  // Scoped room for specific order notifications
-  socket.on("joinOrderRoom", (orderId) => {
-    if (orderId) {
-      socket.join(`order_${orderId}`);
+  // Scoped room for specific order notifications - authorized only if user owns the order or is admin
+  socket.on("joinOrderRoom", async (orderId) => {
+    if (!socket.user) {
+      return socket.emit("error", { message: "Unauthenticated socket session." });
+    }
+
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+      return socket.emit("error", { message: "Invalid order ID." });
+    }
+
+    try {
+      const order = await Order.findById(orderId).select("userId");
+      if (!order) {
+        return socket.emit("error", { message: "Order not found." });
+      }
+
+      if (order.userId.toString() === socket.user.id || socket.user.role === "admin") {
+        socket.join(`order_${orderId}`);
+      } else {
+        socket.emit("error", { message: "Unauthorized: Access denied to order room." });
+      }
+    } catch (err) {
+      socket.emit("error", { message: "Failed to verify order ownership." });
     }
   });
 
-  // Scoped room for admin notifications
+  // Scoped room for admin dashboard notifications - authorized strictly for admin role
   socket.on("joinAdminRoom", () => {
-    socket.join("admins");
+    if (socket.user && socket.user.role === "admin") {
+      socket.join("admins");
+    } else {
+      socket.emit("error", { message: "Unauthorized: Admin privileges required." });
+    }
   });
 
-  socket.on("disconnect", () => {
-  });
+  socket.on("disconnect", () => {});
 });
 
 app.use(cors(corsOptions));
@@ -109,7 +163,10 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use((req, res, next) => {
-  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
+  // Avoid logging sensitive authorization tokens or request bodies in production
+  if (process.env.NODE_ENV !== "test") {
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl}`);
+  }
   next();
 });
 
@@ -129,20 +186,23 @@ app.use((err, req, res, next) => {
 const MONGO_URL = process.env.MONGO_URL || "mongodb://127.0.0.1:27017/student-ecommerce";
 const PORT = process.env.PORT || 5000;
 
-mongoose
-  .connect(MONGO_URL, {
-    serverSelectionTimeoutMS: 15000
-  })
-  .then(async () => {
-    console.log("MongoDB connected successfully");
-    await s3.checkConnection();
+if (require.main === module) {
+  mongoose
+    .connect(MONGO_URL, {
+      serverSelectionTimeoutMS: 15000
+    })
+    .then(async () => {
+      console.log("MongoDB connected successfully");
+      await s3.checkConnection();
 
-    server.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+      server.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("MongoDB connection error:", error.message);
     });
-  })
-  .catch((error) => {
-    console.error("MongoDB connection error:", error.message);
-  });
+}
 
- 
+module.exports = { app, server, io };
+module.exports = { app, server, io };

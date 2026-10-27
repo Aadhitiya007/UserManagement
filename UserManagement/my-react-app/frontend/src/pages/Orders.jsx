@@ -15,7 +15,12 @@ function Orders() {
   useEffect(() => {
     fetchMyOrders();
 
-    const socket = io(API_URL);
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const socket = io(API_URL, {
+      auth: { token }
+    });
 
     const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
     const userId = storedUser.id || storedUser._id;

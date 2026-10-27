@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node tests/s3-image.test.js",
+    "test:security": "node tests/security-audit.test.js",
     "dev": "nodemon server.js"
   },
   "keywords": [],
@@ -25,5 +26,8 @@
     "nodemon": "^3.1.14",
     "pdf-parse": "^2.4.5",
     "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
   }
 }
