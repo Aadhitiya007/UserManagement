@@ -1,20 +1,117 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const CartContext = createContext();
 
+function getStorageKey(user) {
+  if (user && (user.id || user._id)) {
+    return `cart_${user.id || user._id}`;
+  }
+  return "guest_cart";
+}
+
+function loadCartForUser(user) {
+  try {
+    const key = getStorageKey(user);
+    const saved = localStorage.getItem(key);
+    if (saved) return JSON.parse(saved);
+
+    // One-time backward-compatibility migration for legacy "student_cart"
+    if (user) {
+      const legacy = localStorage.getItem("student_cart");
+      if (legacy) {
+        localStorage.removeItem("student_cart");
+        return JSON.parse(legacy);
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export function CartProvider({ children }) {
-  const [cart, setCart] = useState(() => {
+  const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const savedCart = localStorage.getItem("student_cart");
-      return savedCart ? JSON.parse(savedCart) : [];
+      const u = localStorage.getItem("user");
+      return u ? JSON.parse(u) : null;
     } catch {
-      return [];
+      return null;
     }
   });
 
+  const [cart, setCart] = useState(() => loadCartForUser(currentUser));
+
+  // Seamlessly switch active cart on login or logout
+  const switchUser = useCallback((newUser) => {
+    setCurrentUser(newUser);
+
+    if (newUser) {
+      // 1. User logged in: Load their saved personal cart
+      const userKey = getStorageKey(newUser);
+      let existingUserCart = [];
+      try {
+        const saved = localStorage.getItem(userKey);
+        if (saved) existingUserCart = JSON.parse(saved);
+      } catch {
+        existingUserCart = [];
+      }
+
+      // If they had items in a guest cart before logging in, merge them in
+      let guestItems = [];
+      try {
+        const guestSaved = localStorage.getItem("guest_cart");
+        if (guestSaved) {
+          guestItems = JSON.parse(guestSaved);
+          localStorage.removeItem("guest_cart");
+        }
+      } catch {
+        guestItems = [];
+      }
+
+      const mergedCart = [...existingUserCart];
+      if (guestItems.length > 0) {
+        guestItems.forEach((gItem) => {
+          const gId = gItem._id || gItem.id;
+          const found = mergedCart.find((uItem) => (uItem._id || uItem.id) === gId);
+          if (found) {
+            found.quantity += gItem.quantity;
+          } else {
+            mergedCart.push(gItem);
+          }
+        });
+      }
+
+      setCart(mergedCart);
+      localStorage.setItem(userKey, JSON.stringify(mergedCart));
+    } else {
+      // 2. User logged out: Reset in-memory cart to empty guest cart
+      setCart([]);
+      localStorage.removeItem("guest_cart");
+      localStorage.removeItem("student_cart");
+    }
+  }, []);
+
+  // Persist cart items whenever cart or currentUser changes
   useEffect(() => {
-    localStorage.setItem("student_cart", JSON.stringify(cart));
-  }, [cart]);
+    const key = getStorageKey(currentUser);
+    localStorage.setItem(key, JSON.stringify(cart));
+  }, [cart, currentUser]);
+
+  // Synchronize across browser tabs when authentication changes
+  useEffect(() => {
+    function handleStorageChange(e) {
+      if (e.key === "user") {
+        try {
+          const updatedUser = e.newValue ? JSON.parse(e.newValue) : null;
+          switchUser(updatedUser);
+        } catch {
+          switchUser(null);
+        }
+      }
+    }
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [switchUser]);
 
   function addToCart(product, quantity = 1) {
     setCart((prevCart) => {
@@ -50,6 +147,8 @@ export function CartProvider({ children }) {
 
   function clearCart() {
     setCart([]);
+    const key = getStorageKey(currentUser);
+    localStorage.removeItem(key);
   }
 
   return (
@@ -59,7 +158,8 @@ export function CartProvider({ children }) {
         addToCart,
         updateQuantity,
         removeFromCart,
-        clearCart
+        clearCart,
+        switchUser
       }}
     >
       {children}

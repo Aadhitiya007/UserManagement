@@ -12,106 +12,140 @@ const ALLOWED_TRANSITIONS = {
   Cancelled: []
 };
 
+/**
+ * 1. Place a new Order using MongoDB Transactions
+ * Requirements:
+ * - Validate non-empty cart, valid ObjectId, positive integer quantity
+ * - Consolidate duplicate product IDs
+ * - Atomic conditional stock deduction inside session.withTransaction()
+ * - Authoritative DB pricing only (never trust req.body.totalAmount)
+ * - Automatic rollback via transaction on any failure (no manual compensation loops)
+ */
 exports.createOrder = async (req, res) => {
-  const successfullyDeducted = [];
+  const { products } = req.body;
+
+  // 1. Validate inputs
+  if (!Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ message: "Cart is empty. Products array is required." });
+  }
+
+  // 2. Validate product IDs and positive integer quantities; consolidate duplicates
+  const consolidatedMap = new Map();
+  for (const item of products) {
+    if (!item.productId || !mongoose.Types.ObjectId.isValid(item.productId)) {
+      return res.status(400).json({ message: "Invalid product ID in order items." });
+    }
+
+    const qty = Number(item.quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      return res.status(400).json({ message: "Product quantity must be a positive integer." });
+    }
+
+    const idStr = item.productId.toString();
+    if (consolidatedMap.has(idStr)) {
+      consolidatedMap.get(idStr).quantity += qty;
+    } else {
+      consolidatedMap.set(idStr, {
+        productId: new mongoose.Types.ObjectId(idStr),
+        quantity: qty,
+        image: item.image || ""
+      });
+    }
+  }
+
+  const session = await mongoose.startSession();
+  let createdOrder = null;
+
   try {
-    const { products } = req.body;
+    await session.withTransaction(async () => {
+      let calculatedTotal = 0;
+      const validatedProducts = [];
 
-    if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ message: "Cart is empty" });
-    }
+      // 3. Process each consolidated product atomically inside the transaction
+      for (const item of consolidatedMap.values()) {
+        // Atomic conditional stock decrement: requires stock >= requestedQuantity
+        const updatedProduct = await Product.findOneAndUpdate(
+          { _id: item.productId, stock: { $gte: item.quantity } },
+          { $inc: { stock: -item.quantity } },
+          { session, returnDocument: "after" }
+        );
 
-    // 1. Validate inputs and consolidate duplicate product IDs
-    const consolidatedMap = new Map();
-    for (const item of products) {
-      if (!item.productId || !mongoose.Types.ObjectId.isValid(item.productId)) {
-        return res.status(400).json({ message: "Invalid product ID in order items." });
-      }
-
-      const qty = Number(item.quantity);
-      if (!Number.isInteger(qty) || qty <= 0) {
-        return res.status(400).json({ message: "Product quantity must be a positive integer." });
-      }
-
-      const idStr = item.productId.toString();
-      if (consolidatedMap.has(idStr)) {
-        consolidatedMap.get(idStr).quantity += qty;
-      } else {
-        consolidatedMap.set(idStr, {
-          productId: item.productId,
-          quantity: qty,
-          image: item.image || ""
-        });
-      }
-    }
-
-    let calculatedTotal = 0;
-    const validatedProducts = [];
-
-    // 2. Atomically check and deduct stock for each unique item with rollback compensation
-    for (const item of consolidatedMap.values()) {
-      const updatedProduct = await Product.findOneAndUpdate(
-        { _id: item.productId, stock: { $gte: item.quantity } },
-        { $inc: { stock: -item.quantity } },
-        { new: true }
-      );
-
-      if (!updatedProduct) {
-        // Rollback already deducted items in this request
-        for (const rolled of successfullyDeducted) {
-          await Product.findByIdAndUpdate(rolled.productId, {
-            $inc: { stock: rolled.quantity }
-          });
+        if (!updatedProduct) {
+          // Find the product without decrement to give an exact reason
+          const existingProduct = await Product.findById(item.productId).session(session);
+          if (!existingProduct) {
+            const err = new Error(`Product with ID ${item.productId} not found.`);
+            err.statusCode = 404;
+            throw err;
+          }
+          const err = new Error(
+            `Insufficient stock for "${existingProduct.name}". Only ${existingProduct.stock} available.`
+          );
+          err.statusCode = 400;
+          throw err;
         }
 
-        const existingProd = await Product.findById(item.productId);
-        const prodName = existingProd ? existingProd.name : "Item";
-        const availableStock = existingProd ? existingProd.stock : 0;
+        // Price is authoritative from database; never accept client financial inputs
+        calculatedTotal += updatedProduct.price * item.quantity;
 
-        return res.status(400).json({
-          message: `Insufficient stock for "${prodName}". Only ${availableStock} available.`
+        validatedProducts.push({
+          productId: updatedProduct._id,
+          name: updatedProduct.name,
+          price: updatedProduct.price,
+          quantity: item.quantity,
+          image: item.image || updatedProduct.image || ""
         });
       }
 
-      successfullyDeducted.push({
-        productId: item.productId,
-        quantity: item.quantity
-      });
+      // 4. Create the order document inside the active transaction
+      const orders = await Order.create(
+        [
+          {
+            userId: req.user.id,
+            userName: req.user.name || "Customer",
+            userEmail: req.user.email,
+            products: validatedProducts,
+            totalAmount: calculatedTotal,
+            status: "Pending",
+            paymentStatus: "Pending"
+          }
+        ],
+        { session }
+      );
 
-      // Price fetched directly from MongoDB database (never trusted from frontend)
-      calculatedTotal += updatedProduct.price * item.quantity;
-      validatedProducts.push({
-        productId: updatedProduct._id,
-        name: updatedProduct.name,
-        price: updatedProduct.price,
-        quantity: item.quantity,
-        image: item.image || updatedProduct.image || ""
-      });
-    }
-
-    // 3. Create order with initial pending status
-    const order = await Order.create({
-      userId: req.user.id,
-      userName: req.user.name || "Customer",
-      userEmail: req.user.email,
-      products: validatedProducts,
-      totalAmount: Number(calculatedTotal || req.body.totalAmount || 0),
-      status: "Pending",
-      paymentStatus: "Pending"
+      createdOrder = orders[0];
     });
 
-    res.status(201).json({ message: "Order placed successfully", order });
-  } catch (error) {
-    // If an unexpected error occurs during order creation, roll back any stock deductions
-    for (const rolled of successfullyDeducted) {
-      await Product.findByIdAndUpdate(rolled.productId, {
-        $inc: { stock: rolled.quantity }
-      }).catch(() => {});
+    // Notify connected admin rooms of new order placement
+    const io = req.app.get("io");
+    if (io && createdOrder) {
+      const payload = {
+        orderId: createdOrder._id,
+        userId: createdOrder.userId,
+        status: createdOrder.status,
+        paymentStatus: createdOrder.paymentStatus,
+        totalAmount: createdOrder.totalAmount
+      };
+      io.to("admins").to(`user_${createdOrder.userId}`).emit("orderCreated", payload);
     }
-    res.status(500).json({ message: error.message });
+
+    return res.status(201).json({
+      message: "Order placed successfully",
+      order: createdOrder
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      message: error.message || "Failed to process order."
+    });
+  } finally {
+    await session.endSession();
   }
 };
 
+/**
+ * 2. Get Orders for the authenticated user
+ */
 exports.getUserOrders = async (req, res) => {
   try {
     const orders = await Order.find({ userId: req.user.id }).sort({ createdAt: -1 });
@@ -121,6 +155,9 @@ exports.getUserOrders = async (req, res) => {
   }
 };
 
+/**
+ * 3. Get All Orders (Admin only)
+ */
 exports.getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 });
@@ -130,80 +167,147 @@ exports.getAllOrders = async (req, res) => {
   }
 };
 
+/**
+ * 4. Update Order Status with Strict Lifecycle Validation & Atomic Cancellation
+ * Admin only. Transitions:
+ * - Pending -> Processing / Cancelled
+ * - Processing -> Shipped / Cancelled
+ * - Shipped -> Delivered / Cancelled
+ * - Delivered / Cancelled -> Terminal (no further transitions)
+ */
 exports.updateOrderStatus = async (req, res) => {
+  const { status } = req.body;
+  const { id } = req.params;
+
+  if (!status) {
+    return res.status(400).json({ message: "Status is required." });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid order ID format." });
+  }
+
+  const session = await mongoose.startSession();
+
   try {
-    const { status } = req.body;
+    let updatedOrder = null;
 
-    if (!status) {
-      return res.status(400).json({ message: "Status is required." });
-    }
-
-    const order = await Order.findById(req.params.id);
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    // Validate lifecycle status transitions
-    const allowedNext = ALLOWED_TRANSITIONS[order.status] || [];
-    if (order.status !== status && !allowedNext.includes(status)) {
-      return res.status(400).json({
-        message: `Invalid status transition from "${order.status}" to "${status}".`
-      });
-    }
-
-    // Admin can only advance fulfillment status if the order is Paid (unless cancelling)
-    if (order.paymentStatus !== "Paid" && status !== "Cancelled") {
-      return res.status(400).json({
-        message: "Cannot advance status because payment is still Pending. Customer must complete payment first."
-      });
-    }
-
-    // If order is being cancelled, restore inventory exactly once
-    if (status === "Cancelled" && order.status !== "Cancelled") {
-      for (const item of order.products) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { stock: item.quantity }
-        });
+    await session.withTransaction(async () => {
+      // Find order inside transaction
+      const order = await Order.findById(id).session(session);
+      if (!order) {
+        const err = new Error("Order not found");
+        err.statusCode = 404;
+        throw err;
       }
-    }
 
-    order.status = status;
-    await order.save();
+      // If requested status is same as current status
+      if (order.status === status) {
+        if (status === "Cancelled") {
+          const err = new Error("Order is already cancelled.");
+          err.statusCode = 400;
+          throw err;
+        }
+        updatedOrder = order;
+        return;
+      }
 
-    // Notify via Socket.io to scoped rooms and general listener
+      // Check valid lifecycle transition
+      const allowedNext = ALLOWED_TRANSITIONS[order.status] || [];
+      if (!allowedNext.includes(status)) {
+        const err = new Error(
+          `Invalid status transition from "${order.status}" to "${status}".`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Fulfillment transitions (Processing, Shipped, Delivered) require Paid status
+      if (status !== "Cancelled" && order.paymentStatus !== "Paid") {
+        const err = new Error(
+          "Cannot advance status because payment is still Pending. Customer must complete payment first."
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Case 1: Cancellation with atomic inventory restoration
+      if (status === "Cancelled") {
+        // Atomic conditional lock: ensures order is not already Cancelled or Delivered
+        const lockedOrder = await Order.findOneAndUpdate(
+          { _id: id, status: { $in: ["Pending", "Processing", "Shipped"] } },
+          { $set: { status: "Cancelled" } },
+          { session, returnDocument: "after" }
+        );
+
+        if (!lockedOrder) {
+          const err = new Error("Order cannot be cancelled in its current state.");
+          err.statusCode = 400;
+          throw err;
+        }
+
+        // Restore inventory stock atomically inside the transaction
+        for (const item of lockedOrder.products) {
+          if (item.productId && item.quantity > 0) {
+            await Product.findByIdAndUpdate(
+              item.productId,
+              { $inc: { stock: item.quantity } },
+              { session }
+            );
+          }
+        }
+
+        updatedOrder = lockedOrder;
+      } else {
+        // Case 2: Advancement to Processing, Shipped, or Delivered
+        order.status = status;
+        await order.save({ session });
+        updatedOrder = order;
+      }
+    });
+
+    // Notify strictly authorized scoped rooms via Socket.io (no broad broadcast)
     const io = req.app.get("io");
-    if (io) {
+    if (io && updatedOrder) {
       const payload = {
-        orderId: order._id,
-        status: order.status,
-        paymentStatus: order.paymentStatus
+        orderId: updatedOrder._id,
+        status: updatedOrder.status,
+        paymentStatus: updatedOrder.paymentStatus
       };
-      io.to(`order_${order._id}`)
-        .to(`user_${order.userId}`)
+      io.to(`order_${updatedOrder._id}`)
+        .to(`user_${updatedOrder.userId}`)
         .to("admins")
         .emit("orderStatusUpdated", payload);
-      // Also emit generally for current active listeners
-      io.emit("orderStatusUpdated", payload);
     }
 
-    res.json({
-      message: "Order status updated",
-      order
+    return res.json({
+      message: "Order status updated successfully",
+      order: updatedOrder
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      message: error.message || "Failed to update order status."
+    });
+  } finally {
+    await session.endSession();
   }
 };
 
+/**
+ * 5. Admin Dashboard Statistics
+ */
 exports.getAdminStats = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const totalProducts = await Product.countDocuments();
-    const totalOrders = await Order.countDocuments();
+    const [totalUsers, totalProducts, totalOrders, paidOrders] = await Promise.all([
+      User.countDocuments(),
+      Product.countDocuments(),
+      Order.countDocuments(),
+      Order.find({ paymentStatus: "Paid" }).select("totalAmount")
+    ]);
 
-    // Business Logic Fix: Total revenue must strictly sum orders where paymentStatus is "Paid"
-    const paidOrders = await Order.find({ paymentStatus: "Paid" });
-    const totalRevenue = paidOrders.reduce((sum, ord) => sum + (ord.totalAmount || 0), 0);
+    // Revenue strictly sums verified Paid orders
+    const totalRevenue = paidOrders.reduce((sum, ord) => sum + (Number(ord.totalAmount) || 0), 0);
 
     res.json({
       totalUsers,
@@ -215,4 +319,3 @@ exports.getAdminStats = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-

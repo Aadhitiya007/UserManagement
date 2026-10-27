@@ -20,23 +20,32 @@ import AdminOrders from "./pages/admin/AdminOrders";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminReviews from "./pages/admin/AdminReviews";
 
-import {useEffect} from "react";
-import {io} from "socket.io-client";
+import { useEffect } from "react";
+import { io } from "socket.io-client";
 import { API_URL } from "./config/api";
 
 function App() {
-  useEffect(()=>{
-    const socket = io(API_URL);
-    socket.on("connect",()=>{
-      console.log("Connected to WebSocket:",socket.id);
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const socket = io(API_URL, {
+      auth: { token }
     });
-    socket.on("disconnect",()=>{
+
+    socket.on("connect", () => {
+      console.log("Connected to WebSocket:", socket.id);
+    });
+
+    socket.on("disconnect", () => {
       console.log("Disconnected from WebSocket");
     });
-    return()=>{
+
+    return () => {
       socket.disconnect();
     };
-  },[]);
+  }, []);
+
   return (
     <BrowserRouter>
       <CartProvider>

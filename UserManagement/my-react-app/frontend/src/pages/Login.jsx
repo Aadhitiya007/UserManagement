@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { API_URL } from "../config/api";
+import { useCart } from "../context/CartContext";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -9,6 +10,7 @@ function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { switchUser } = useCart();
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -31,6 +33,11 @@ function Login() {
       // Store auth data in localStorage
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Switch cart to the logged-in user's personal cart
+      if (typeof switchUser === "function") {
+        switchUser(data.user);
+      }
 
       if (data.user?.role === "admin") {
         navigate("/admin/dashboard");

@@ -20,7 +20,12 @@ function AdminOrders() {
   useEffect(() => {
     fetchOrders();
 
-    const socket = io(API_URL);
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const socket = io(API_URL, {
+      auth: { token }
+    });
     socket.emit("joinAdminRoom");
 
     socket.on("orderStatusUpdated", (data) => {

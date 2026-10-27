@@ -29,39 +29,52 @@ const productSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Product name is required"]
+      required: [true, "Product name is required"],
+      trim: true
     },
     description: {
       type: String,
-      default: ""
+      default: "",
+      trim: true
     },
     price: {
       type: Number,
-      required: [true, "Product price is required"]
+      required: [true, "Product price is required"],
+      min: [0, "Product price cannot be negative"]
     },
     category: {
       type: String,
-      required: [true, "Product category is required"]
+      required: [true, "Product category is required"],
+      trim: true
     },
     stock: {
       type: Number,
       required: [true, "Product stock quantity is required"],
-      default: 0
+      default: 0,
+      min: [0, "Product stock quantity cannot be negative"],
+      validate: {
+        validator: Number.isInteger,
+        message: "Stock quantity must be an integer"
+      }
     },
     image: {
       type: String,
       default: ""
     },
     mrp: {
-      type: Number
+      type: Number,
+      min: [0, "MRP cannot be negative"]
     },
     rating: {
       type: Number,
-      default: 0
+      default: 0,
+      min: [0, "Rating cannot be negative"],
+      max: [5, "Rating cannot exceed 5"]
     },
     reviewsCount: {
       type: Number,
-      default: 0
+      default: 0,
+      min: [0, "Reviews count cannot be negative"]
     },
     warranty: {
       type: String,
@@ -71,5 +84,8 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+productSchema.index({ category: 1 });
+productSchema.index({ price: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

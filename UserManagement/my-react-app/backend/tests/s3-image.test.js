@@ -97,6 +97,19 @@ async function runTests() {
     assert.strictEqual(resolved[2].imageUrl, "data:image/jpeg;base64,abc");
   });
 
+  // Test 8: S3 image removal on product deletion
+  await testAsync("Safely purges and invokes S3 deletion for product images", async () => {
+    const { deleteProductImageFile } = require("../controllers/productController");
+    // Verify it handles invalid / empty images cleanly
+    await deleteProductImageFile("");
+    await deleteProductImageFile("data:image/png;base64,123");
+    // Verify it handles canonical S3 key
+    await deleteProductImageFile("products/test-image-removal-key.jpg");
+    // Verify it handles full S3 URL
+    const bucket = process.env.AWS_S3_BUCKET_NAME || "test-bucket";
+    await deleteProductImageFile(`https://${bucket}.s3.amazonaws.com/products/test-legacy.jpg`);
+  });
+
   console.log(`\n=== Test Results: ${passed}/${total} passed ===`);
   process.exit(passed === total ? 0 : 1);
 }

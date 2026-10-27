@@ -3,7 +3,7 @@ import { useCart } from "../context/CartContext";
 
 function Navbar() {
   const navigate = useNavigate();
-  const { cart } = useCart();
+  const { cart, switchUser } = useCart();
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
   const token = localStorage.getItem("token");
@@ -13,6 +13,10 @@ function Navbar() {
   function handleLogout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("student_cart");
+    if (typeof switchUser === "function") {
+      switchUser(null);
+    }
     navigate("/login");
   }
 

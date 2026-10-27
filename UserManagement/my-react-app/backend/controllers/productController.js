@@ -2,7 +2,8 @@ const Product = require("../models/Product");
 const Order = require("../models/Order");
 const {
   PutObjectCommand,
-  GetObjectCommand
+  GetObjectCommand,
+  DeleteObjectCommand
 } = require("@aws-sdk/client-s3");
 const {
   getSignedUrl
@@ -56,7 +57,7 @@ async function getProductWithImageUrl(product) {
 
   const region = typeof s3.getRegion === "function"
     ? s3.getRegion()
-    : (process.env.AWS_REGION || "ap-south-2");
+    : (process.env.AWS_REGION );
 
   let key = "";
 
@@ -299,6 +300,71 @@ exports.createProduct = async (req, res) => {
   }
 };
 
+/**
+ * Deletes a product image from AWS S3 (or local disk if stored locally).
+ * Also purges the corresponding presigned URL cache entry.
+ */
+async function deleteProductImageFile(image) {
+  if (!image || typeof image !== "string") return;
+  const trimmed = image.trim();
+  if (!trimmed || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return;
+
+  const bucketName = typeof s3.getBucketName === "function"
+    ? s3.getBucketName()
+    : (process.env.AWS_S3_BUCKET_NAME || "");
+
+  let s3Key = "";
+
+  // 1. Check canonical S3 key: products/filename.jpg
+  if (trimmed.startsWith("products/")) {
+    s3Key = trimmed.replace(/\.\./g, "");
+  } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      const pathname = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).replace(/\.\./g, "");
+      if (pathname.startsWith("products/")) {
+        s3Key = pathname;
+      } else if (parsed.hostname.includes("amazonaws.com") || parsed.hostname.includes(".s3.")) {
+        const idx = pathname.indexOf("products/");
+        if (idx !== -1) {
+          s3Key = pathname.substring(idx);
+        }
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }
+
+  // If S3 key found, delete object from S3 bucket
+  if (s3Key && bucketName) {
+    try {
+      const deleteCmd = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: s3Key
+      });
+      await s3.send(deleteCmd);
+      presignedCache.delete(s3Key);
+      console.log(`✓ AWS S3 Object Deleted: ${s3Key}`);
+    } catch (err) {
+      console.warn(`⚠️ AWS S3 object deletion warning for "${s3Key}":`, err.message);
+    }
+  }
+
+  // 2. If image is stored in local uploads directory
+  if (trimmed.startsWith("uploads/") || trimmed.startsWith("/uploads/")) {
+    try {
+      const localRelPath = trimmed.replace(/^\/+/, "");
+      const localFullPath = path.join(__dirname, "..", localRelPath);
+      if (fs.existsSync(localFullPath)) {
+        await fs.promises.unlink(localFullPath);
+        console.log(`✓ Local product image file deleted: ${localRelPath}`);
+      }
+    } catch (err) {
+      console.warn("⚠️ Failed to delete local image file:", err.message);
+    }
+  }
+}
+
 exports.updateProduct = async (req, res) => {
   try {
     const { name, description, price, category, stock } = req.body;
@@ -318,11 +384,18 @@ exports.updateProduct = async (req, res) => {
     let s3Error = null;
 
     if (req.file) {
+      // If replacing an existing image, delete the old image file from S3 / disk
+      if (product.image) {
+        await deleteProductImageFile(product.image);
+      }
       const result = await processProductImage(req.file);
       product.image = result.image;
       uploadSource = result.uploadSource;
       s3Error = result.s3Error;
-    } else if (req.body.image) {
+    } else if (req.body.image && req.body.image !== product.image) {
+      if (product.image) {
+        await deleteProductImageFile(product.image);
+      }
       product.image = req.body.image;
       uploadSource = "url";
     }
@@ -343,10 +416,17 @@ exports.updateProduct = async (req, res) => {
 
 exports.deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndDelete(req.params.id);
+    const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
+
+    // Clean up S3 image and local files before deleting product document
+    if (product.image) {
+      await deleteProductImageFile(product.image);
+    }
+
+    await Product.findByIdAndDelete(req.params.id);
     res.json({ message: "Product deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -498,3 +578,4 @@ exports.deleteProductReview = async (req, res) => {
 exports.getProductWithImageUrl = getProductWithImageUrl;
 exports.getProductsWithImageUrls = getProductsWithImageUrls;
 exports.processProductImage = processProductImage;
+exports.deleteProductImageFile = deleteProductImageFile;
