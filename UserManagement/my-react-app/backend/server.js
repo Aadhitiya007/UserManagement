@@ -104,7 +104,7 @@ io.use((socket, next) => {
   }
 });
 
-// 2. Scoped & Authorized Room Event Handlers
+
 io.on("connection", (socket) => {
   // Scoped room for specific user notifications - authorized only for that user or an admin
   socket.on("joinUserRoom", (userId) => {
