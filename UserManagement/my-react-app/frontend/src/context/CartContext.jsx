@@ -52,7 +52,9 @@ export function CartProvider({ children }) {
       try {
         const saved = localStorage.getItem(userKey);
         if (saved) existingUserCart = JSON.parse(saved);
-      } catch {}
+      } catch {
+        existingUserCart = [];
+      }
 
       // If they had items in a guest cart before logging in, merge them in
       let guestItems = [];
@@ -62,7 +64,9 @@ export function CartProvider({ children }) {
           guestItems = JSON.parse(guestSaved);
           localStorage.removeItem("guest_cart");
         }
-      } catch {}
+      } catch {
+        guestItems = [];
+      }
 
       const mergedCart = [...existingUserCart];
       if (guestItems.length > 0) {
@@ -100,7 +104,9 @@ export function CartProvider({ children }) {
         try {
           const updatedUser = e.newValue ? JSON.parse(e.newValue) : null;
           switchUser(updatedUser);
-        } catch {}
+        } catch {
+          switchUser(null);
+        }
       }
     }
     window.addEventListener("storage", handleStorageChange);
