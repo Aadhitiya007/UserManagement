@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
+import logo from "../assets/logo.png";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -22,8 +23,12 @@ function Navbar() {
 
   return (
     <header className="navbar">
-      <Link to="/products" className="navbar-brand">
-        🛒 shopiee
+      <Link to="/products" className="navbar-brand" style={{ display: "flex", alignItems: "center" }}>
+        <img
+          src={logo}
+          alt="shopiee"
+          style={{ height: "38px", width: "auto", objectFit: "contain" }}
+        />
       </Link>
 
       <nav className="navbar-links">
