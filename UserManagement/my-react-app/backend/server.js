@@ -170,6 +170,33 @@ app.use((req, res, next) => {
   next();
 });
 
+// Live System Health Check Endpoint
+app.get("/api/health", (req, res) => {
+  const isDbConnected = mongoose.connection.readyState === 1;
+  const bucketName =
+    typeof s3.getBucketName === "function"
+      ? s3.getBucketName()
+      : (process.env.AWS_S3_BUCKET_NAME || "");
+
+  const healthData = {
+    status: isDbConnected ? "healthy" : "degraded",
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    services: {
+      database: {
+        status: isDbConnected ? "connected" : "disconnected"
+      },
+      s3: {
+        status: bucketName ? "configured" : "not_configured",
+        bucket: bucketName || null,
+        region: process.env.AWS_REGION || "ap-south-2"
+      }
+    }
+  };
+
+  res.status(isDbConnected ? 200 : 503).json(healthData);
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
