@@ -124,6 +124,11 @@ exports.simulatePayment = async (req, res) => {
           .emit("orderStatusUpdated", payload);
       }
 
+      // Asynchronously trigger automated PDF invoice generation & email delivery
+      processOrderInvoiceAndEmail(order._id).catch((err) =>
+        console.error("[Payment] Invoice trigger error:", err.message)
+      );
+
       return res.status(200).json({
         success: true,
         message: "Payment simulated successfully",
