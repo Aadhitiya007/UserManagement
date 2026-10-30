@@ -195,7 +195,7 @@ function ProductDetail() {
         </Link>
 
         {/* Product Details Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", background: "white", padding: "30px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+        <div className="product-detail-grid">
           {/* Left Column: Image & Product Specifications */}
           <div>
             <img
@@ -429,3 +429,4 @@ function ProductDetail() {
 }
 
 export default ProductDetail;
+

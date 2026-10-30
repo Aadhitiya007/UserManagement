@@ -31,6 +31,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
+app.set("trust proxy", 1);
 const server = http.createServer(app);
 
 const allowedOrigins = [
@@ -233,3 +234,5 @@ if (require.main === module) {
 
 module.exports = { app, server, io };
 module.exports = { app, server, io };
+
+

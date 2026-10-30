@@ -7,11 +7,13 @@ const {
   getUserOrders,
   getAllOrders,
   updateOrderStatus,
-  getAdminStats
+  getAdminStats,
+  downloadInvoice
 } = require("../controllers/orderController");
 
 router.post("/", verifyToken, createOrder);
 router.get("/my-orders", verifyToken, getUserOrders);
+router.get("/:id/invoice", verifyToken, downloadInvoice);
 router.get("/", verifyToken, requireAdmin, getAllOrders);
 router.get("/stats", verifyToken, requireAdmin, getAdminStats);
 router.put("/:id/status", verifyToken, requireAdmin, updateOrderStatus);

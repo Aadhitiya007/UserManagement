@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const User = require("../models/User");
+const { generateInvoicePDF } = require("../utils/invoiceGenerator");
 
 // Valid status lifecycle transitions
 const ALLOWED_TRANSITIONS = {
@@ -317,5 +318,47 @@ exports.getAdminStats = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * 6. Authenticated Invoice Download
+ * GET /api/orders/:id/invoice
+ */
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid order ID format.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+
+    // Ownership or Admin authorization
+    const isOwner = order.userId.toString() === req.user.id;
+    const isAdmin = req.user.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: 'Access denied. Not your order.' });
+    }
+
+    // Invoices are strictly restricted to Paid orders
+    if (order.paymentStatus !== 'Paid') {
+      return res.status(400).json({ message: 'Invoice is only available for paid orders.' });
+    }
+
+    const user = await User.findById(order.userId).select('name email phone country');
+    const pdfBuffer = await generateInvoicePDF(order, user);
+    const invoiceNum = order.invoiceNumber || ('INV-' + order._id.toString().substring(18, 24).toUpperCase());
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="shopiee-invoice-${invoiceNum}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.end(pdfBuffer);
+  } catch (err) {
+    console.error('[Invoice Download] Error:', err.message);
+    return res.status(500).json({ message: 'Failed to generate invoice PDF.' });
   }
 };

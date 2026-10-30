@@ -61,16 +61,17 @@ function Products() {
     <>
       <Navbar />
       <div className="container">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-          <h2>Available Products</h2>
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search products..."
-            style={{ width: "260px", maxWidth: "500px" }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+          <h2 style={{ fontSize: "1.4rem", fontWeight: 700 }}>Available Products</h2>
+          <div style={{ width: "100%", maxWidth: "340px" }}>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {error && (
@@ -80,9 +81,9 @@ function Products() {
         )}
 
         {loading ? (
-          <p>Loading products...</p>
+          <p style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>Loading products...</p>
         ) : products.length === 0 ? (
-          <p>No products found.</p>
+          <p style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>No products found.</p>
         ) : (
           <>
             <div className="product-grid">
@@ -99,35 +100,35 @@ function Products() {
                     <img
                       src={imageUrl}
                       alt={product.name}
+                      className="product-card-img"
                       onError={(e) => {
                         e.currentTarget.onerror = null;
                         e.currentTarget.src = "https://via.placeholder.com/300x180?text=No+Image";
                       }}
                     />
                     <div className="product-card-body">
-                      <span style={{ fontSize: "0.8rem", color: "#6b7280", textTransform: "uppercase" }}>
+                      <span className="product-category">
                         {product.category}
                       </span>
-                      <h3 className="product-card-title">{product.name}</h3>
-                      <p className="product-card-price">₹{product.price}</p>
+                      <h3 className="product-title">{product.name}</h3>
+                      <p className="product-price">₹{product.price}</p>
 
                       {isOutOfStock && (
-                        <div style={{ marginBottom: "15px" }}>
+                        <div style={{ marginBottom: "12px" }}>
                           <span className="badge badge-danger">Out of Stock</span>
                         </div>
                       )}
 
-                      <div style={{ marginTop: "auto", display: "flex", gap: "10px" }}>
-                        <Link to={`/products/${product._id}`} className="btn btn-outline btn-sm" style={{ flex: 1 }}>
+                      <div style={{ marginTop: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <Link to={`/products/${product._id}`} className="btn btn-outline btn-sm">
                           Details
                         </Link>
                         <button
                           onClick={() => addToCart(product)}
                           disabled={isOutOfStock}
                           className="btn btn-primary btn-sm"
-                          style={{ flex: 1 }}
                         >
-                          {isOutOfStock ? "Sold Out" : "Add to Cart"}
+                          {isOutOfStock ? "Sold Out" : "Add"}
                         </button>
                       </div>
                     </div>
@@ -138,7 +139,7 @@ function Products() {
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", marginTop: "30px" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", marginTop: "30px", flexWrap: "wrap" }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -147,12 +148,11 @@ function Products() {
                   }}
                   disabled={currentPage === 1}
                   className="btn btn-outline btn-sm"
-                  style={{ padding: "6px 14px" }}
                 >
-                  ← Previous
+                  ← Prev
                 </button>
 
-                <span style={{ fontSize: "0.9rem", color: "#475569" }}>
+                <span style={{ fontSize: "0.85rem", color: "#475569" }}>
                   Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
                 </span>
 
@@ -164,7 +164,6 @@ function Products() {
                   }}
                   disabled={currentPage === totalPages}
                   className="btn btn-outline btn-sm"
-                  style={{ padding: "6px 14px" }}
                 >
                   Next →
                 </button>
@@ -178,6 +177,7 @@ function Products() {
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             className="scroll-to-top-btn"
             title="Back to Top"
+            aria-label="Back to Top"
           >
             ↑
           </button>

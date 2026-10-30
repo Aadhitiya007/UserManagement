@@ -15,6 +15,35 @@ function AdminOrders() {
   const [searchTerm, setSearchTerm] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  async function handleDownloadInvoice(orderId, invoiceNumber) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      setDownloadingId(orderId);
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/invoice`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to download invoice");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shopiee-invoice-${invoiceNumber || orderId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Invoice error: ${err.message}`);
+    } finally {
+      setDownloadingId(null);
+    }
+  }
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -234,6 +263,7 @@ function AdminOrders() {
                       <th>Payment</th>
                       <th>Status</th>
                       <th>Date</th>
+                      <th>Invoice</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -290,6 +320,21 @@ function AdminOrders() {
                         </td>
                         <td style={{ fontSize: "0.85rem", color: "#6b7280" }}>
                           {new Date(order.createdAt).toLocaleDateString()}
+                        </td>
+                        <td>
+                          {order.paymentStatus === "Paid" ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(order._id, order.invoiceNumber)}
+                              disabled={downloadingId === order._id}
+                              className="btn btn-outline btn-sm"
+                              style={{ fontSize: "0.75rem", padding: "3px 8px", minHeight: "auto" }}
+                            >
+                              {downloadingId === order._id ? "..." : "📄 PDF"}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
