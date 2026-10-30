@@ -21,6 +21,8 @@ import EditProduct from "./pages/admin/EditProduct";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminReviews from "./pages/admin/AdminReviews";
+import AdminDiscounts from "./pages/admin/AdminDiscounts";
+import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
 
 import { useEffect } from "react";
 import { io } from "socket.io-client";
@@ -142,6 +144,14 @@ function App() {
             }
           />
           <Route
+            path="/admin/discounts"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDiscounts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/users"
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
@@ -157,6 +167,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/admin/logs"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminAuditLogs />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Catch-all fallback */}
           <Route path="*" element={<Navigate to="/products" replace />} />
@@ -167,4 +185,3 @@ function App() {
 }
 
 export default App;
-

@@ -11,6 +11,8 @@ const {
 const s3 = require("../config/s3");
 const fs = require("fs");
 const path = require("path");
+const { calculateProductDiscount } = require("../utils/discountCalculator");
+const { logActivity } = require("../utils/logger");
 
 // In-memory cache for presigned URLs: key -> { url, expiresAt }
 const presignedCache = new Map();
@@ -19,6 +21,7 @@ const presignedCache = new Map();
  * Converts a stored S3 object key or legacy URL into a temporary presigned URL.
  * Handles private S3 objects while retaining compatibility with existing
  * Base64 images, local upload paths, and external image URLs.
+ * Also appends authoritative effective discounted price & stock status.
  */
 async function getProductWithImageUrl(product) {
   if (!product) return product;
@@ -27,6 +30,15 @@ async function getProductWithImageUrl(product) {
     typeof product.toObject === "function"
       ? product.toObject()
       : { ...product };
+
+  // Calculate discount & stock metrics
+  const discountInfo = calculateProductDiscount(item);
+  item.effectivePrice = discountInfo.effectivePrice;
+  item.discountAmount = discountInfo.discountAmount;
+  item.discountPercent = discountInfo.discountPercent;
+  item.isDiscountActive = discountInfo.isDiscountActive;
+  item.isOutOfStock = Number(item.stock) <= 0;
+  item.isLowStock = Number(item.stock) > 0 && Number(item.stock) <= (item.lowStockThreshold || 5);
 
   const image =
     typeof item.image === "string"
@@ -57,11 +69,11 @@ async function getProductWithImageUrl(product) {
 
   const region = typeof s3.getRegion === "function"
     ? s3.getRegion()
-    : (process.env.AWS_REGION );
+    : (process.env.AWS_REGION || "ap-south-1");
 
   let key = "";
 
-  // New canonical format: products/filename.jpg
+  // Canonical format: products/filename.jpg
   if (image.startsWith("products/")) {
     key = image.replace(/\.\./g, "");
   } else if (image.startsWith("http://") || image.startsWith("https://")) {
@@ -98,55 +110,41 @@ async function getProductWithImageUrl(product) {
     try {
       const now = Date.now();
       const cached = presignedCache.get(key);
-      if (cached && cached.expiresAt > now) {
+
+      if (cached && cached.expiresAt > now + 60 * 1000) {
         item.imageUrl = cached.url;
-        item.image = cached.url;
         return item;
       }
 
-      const command = new GetObjectCommand({
-        Bucket: bucketName,
-        Key: key
-      });
+      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+        const command = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: key
+        });
 
-      const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        presignedCache.set(key, {
+          url: presignedUrl,
+          expiresAt: now + 3500 * 1000
+        });
 
-      // Cache for 50 minutes (safety buffer before 60-min expiry)
-      presignedCache.set(key, {
-        url: signedUrl,
-        expiresAt: now + 50 * 60 * 1000
-      });
-
-      item.imageUrl = signedUrl;
-      item.image = signedUrl;
-    } catch (error) {
-      console.warn(`Unable to sign S3 image URL for key "${key}":`, error.message);
-      item.imageUrl = "";
+        item.imageUrl = presignedUrl;
+      }
+    } catch (err) {
+      console.warn(`Presigned URL warning for key "${key}":`, err.message);
     }
-  } else if (key && !bucketName) {
-    item.imageUrl = "";
   }
 
   return item;
 }
 
 /**
- * Applies the presigned URL helper across an array of products.
+ * Resolves images & pricing for an array of products in parallel
  */
 async function getProductsWithImageUrls(products) {
   if (!Array.isArray(products)) return [];
-  return Promise.all(products.map(getProductWithImageUrl));
+  return Promise.all(products.map((p) => getProductWithImageUrl(p)));
 }
-
-// Periodic cleanup of expired cache entries
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of presignedCache.entries()) {
-    if (value.expiresAt <= now) {
-      presignedCache.delete(key);
-    }
-  }
-}, 15 * 60 * 1000).unref();
 
 exports.getProducts = async (req, res) => {
   try {
@@ -234,7 +232,6 @@ async function processProductImage(file) {
 
     await s3.send(command);
 
-    // Store the canonical key in MongoDB, not a public S3 URL
     image = fileName;
     uploadSource = "s3";
     console.log("✓ AWS S3 Upload Successful. Object Key:", fileName);
@@ -258,10 +255,32 @@ async function processProductImage(file) {
 
 exports.createProduct = async (req, res) => {
   try {
-    const { name, description, price, category, stock } = req.body;
+    const {
+      name,
+      description,
+      price,
+      category,
+      stock,
+      lowStockThreshold,
+      discountType,
+      discountValue,
+      discountStartDate,
+      discountEndDate,
+      isDiscountActive
+    } = req.body;
 
-    if (!name || !price || !category) {
+    if (!name || price === undefined || !category) {
       return res.status(400).json({ message: "Name, price, and category are required" });
+    }
+
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      return res.status(400).json({ message: "Product price must be a non-negative number" });
+    }
+
+    const numStock = Number(stock !== undefined ? stock : 0);
+    if (isNaN(numStock) || numStock < 0) {
+      return res.status(400).json({ message: "Stock must be a non-negative number" });
     }
 
     let image = "";
@@ -278,16 +297,71 @@ exports.createProduct = async (req, res) => {
       uploadSource = "url";
     }
 
+    // Configure discount if supplied
+    let discountConfig = {
+      discountType: "percentage",
+      value: 0,
+      isActive: false
+    };
+
+    if (discountValue !== undefined && Number(discountValue) > 0) {
+      const val = Number(discountValue);
+      const type = discountType === "fixed" ? "fixed" : "percentage";
+
+      if (type === "percentage" && val > 100) {
+        return res.status(400).json({ message: "Percentage discount cannot exceed 100%." });
+      }
+      if (type === "fixed" && val > numPrice) {
+        return res.status(400).json({ message: "Fixed discount cannot exceed the product price." });
+      }
+
+      discountConfig = {
+        discountType: type,
+        value: val,
+        startDate: discountStartDate ? new Date(discountStartDate) : new Date(),
+        endDate: discountEndDate ? new Date(discountEndDate) : null,
+        isActive: isDiscountActive !== undefined ? (isDiscountActive === true || isDiscountActive === "true") : true
+      };
+    }
+
     const product = await Product.create({
       name,
       description: description || "",
-      price: Number(price),
+      price: numPrice,
       category,
-      stock: Number(stock || 0),
+      stock: numStock,
+      lowStockThreshold: lowStockThreshold !== undefined ? Number(lowStockThreshold) : 5,
+      discount: discountConfig,
       image
     });
 
     const productWithUrl = await getProductWithImageUrl(product);
+
+    // Audit Log: Product Created
+    await logActivity({
+      action: "PRODUCT_CREATED",
+      category: "INVENTORY",
+      actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+      target: { entityType: "Product", entityId: product._id, name: product.name },
+      status: "SUCCESS",
+      details: {
+        price: product.price,
+        stock: product.stock,
+        category: product.category,
+        discount: product.discount
+      }
+    });
+
+    if (product.stock === 0) {
+      await logActivity({
+        action: "PRODUCT_OUT_OF_STOCK",
+        category: "INVENTORY",
+        actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+        target: { entityType: "Product", entityId: product._id, name: product.name },
+        status: "WARNING",
+        details: { stock: 0 }
+      });
+    }
 
     res.status(201).json({
       message: "Product created successfully",
@@ -367,24 +441,79 @@ async function deleteProductImageFile(image) {
 
 exports.updateProduct = async (req, res) => {
   try {
-    const { name, description, price, category, stock } = req.body;
+    const {
+      name,
+      description,
+      price,
+      category,
+      stock,
+      lowStockThreshold,
+      discountType,
+      discountValue,
+      discountStartDate,
+      discountEndDate,
+      isDiscountActive
+    } = req.body;
+
     const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
+    const previousStock = product.stock;
+    const previousDiscount = { ...product.discount };
+
     if (name) product.name = name;
     if (description !== undefined) product.description = description;
-    if (price !== undefined) product.price = Number(price);
+    if (price !== undefined) {
+      const numPrice = Number(price);
+      if (isNaN(numPrice) || numPrice < 0) {
+        return res.status(400).json({ message: "Price must be a non-negative number" });
+      }
+      product.price = numPrice;
+    }
     if (category) product.category = category;
-    if (stock !== undefined) product.stock = Number(stock);
+    if (stock !== undefined) {
+      const numStock = Number(stock);
+      if (isNaN(numStock) || numStock < 0) {
+        return res.status(400).json({ message: "Stock must be a non-negative integer" });
+      }
+      product.stock = numStock;
+    }
+    if (lowStockThreshold !== undefined) {
+      product.lowStockThreshold = Math.max(0, Number(lowStockThreshold));
+    }
+
+    // Update discount configuration if provided
+    let discountChanged = false;
+    if (discountValue !== undefined || discountType !== undefined || isDiscountActive !== undefined) {
+      const type = discountType || product.discount?.discountType || "percentage";
+      const val = discountValue !== undefined ? Number(discountValue) : (product.discount?.value || 0);
+
+      if (type === "percentage" && val > 100) {
+        return res.status(400).json({ message: "Percentage discount cannot exceed 100%." });
+      }
+      if (type === "fixed" && val > product.price) {
+        return res.status(400).json({ message: "Fixed discount cannot exceed the product price." });
+      }
+
+      product.discount = {
+        discountType: type,
+        value: val,
+        startDate: discountStartDate ? new Date(discountStartDate) : (product.discount?.startDate || new Date()),
+        endDate: discountEndDate ? new Date(discountEndDate) : (product.discount?.endDate || null),
+        isActive: isDiscountActive !== undefined
+          ? (isDiscountActive === true || isDiscountActive === "true")
+          : (val > 0)
+      };
+      discountChanged = true;
+    }
 
     let uploadSource = "none";
     let s3Error = null;
 
     if (req.file) {
-      // If replacing an existing image, delete the old image file from S3 / disk
       if (product.image) {
         await deleteProductImageFile(product.image);
       }
@@ -402,6 +531,47 @@ exports.updateProduct = async (req, res) => {
 
     await product.save();
     const productWithUrl = await getProductWithImageUrl(product);
+
+    // Audit Log: Stock changes
+    if (stock !== undefined && Number(stock) !== previousStock) {
+      await logActivity({
+        action: "PRODUCT_STOCK_UPDATED",
+        category: "INVENTORY",
+        actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+        target: { entityType: "Product", entityId: product._id, name: product.name },
+        status: "SUCCESS",
+        details: {
+          previousQuantity: previousStock,
+          newQuantity: product.stock
+        }
+      });
+
+      if (product.stock === 0) {
+        await logActivity({
+          action: "PRODUCT_OUT_OF_STOCK",
+          category: "INVENTORY",
+          actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+          target: { entityType: "Product", entityId: product._id, name: product.name },
+          status: "WARNING",
+          details: { stock: 0 }
+        });
+      }
+    }
+
+    // Audit Log: Discount changes
+    if (discountChanged) {
+      await logActivity({
+        action: "PRODUCT_DISCOUNT_MODIFIED",
+        category: "DISCOUNT",
+        actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+        target: { entityType: "Product", entityId: product._id, name: product.name },
+        status: "SUCCESS",
+        details: {
+          previousDiscount,
+          newDiscount: product.discount
+        }
+      });
+    }
 
     res.json({
       message: "Product updated successfully",
@@ -421,12 +591,25 @@ exports.deleteProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
+    const name = product.name;
+    const prodId = product._id;
+
     // Clean up S3 image and local files before deleting product document
     if (product.image) {
       await deleteProductImageFile(product.image);
     }
 
     await Product.findByIdAndDelete(req.params.id);
+
+    await logActivity({
+      action: "PRODUCT_DELETED",
+      category: "INVENTORY",
+      actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+      target: { entityType: "Product", entityId: prodId, name },
+      status: "SUCCESS",
+      details: { productName: name }
+    });
+
     res.json({ message: "Product deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -527,9 +710,7 @@ exports.getAllReviews = async (req, res) => {
       }
     }
 
-    // Sort newest first
     allReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
     res.json(allReviews);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -550,11 +731,9 @@ exports.deleteProductReview = async (req, res) => {
       return res.status(404).json({ message: "Review not found" });
     }
 
-    // Filter out the review
     product.reviews = product.reviews.filter((r) => r._id.toString() !== reviewId);
     product.reviewsCount = product.reviews.length;
 
-    // Recalculate average rating
     if (product.reviews.length > 0) {
       const totalStars = product.reviews.reduce((sum, item) => sum + item.rating, 0);
       product.rating = Math.round((totalStars / product.reviews.length) * 10) / 10;
@@ -574,7 +753,6 @@ exports.deleteProductReview = async (req, res) => {
   }
 };
 
-// Export helpers for testing and reuse
 exports.getProductWithImageUrl = getProductWithImageUrl;
 exports.getProductsWithImageUrls = getProductsWithImageUrls;
 exports.processProductImage = processProductImage;

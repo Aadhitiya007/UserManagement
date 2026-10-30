@@ -2,7 +2,11 @@ const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const User = require("../models/User");
+const Coupon = require("../models/Coupon");
+const AuditLog = require("../models/AuditLog");
 const { generateInvoicePDF } = require("../utils/invoiceGenerator");
+const { calculateProductDiscount } = require("../utils/discountCalculator");
+const { logActivity } = require("../utils/logger");
 
 // Valid status lifecycle transitions
 const ALLOWED_TRANSITIONS = {
@@ -19,11 +23,13 @@ const ALLOWED_TRANSITIONS = {
  * - Validate non-empty cart, valid ObjectId, positive integer quantity
  * - Consolidate duplicate product IDs
  * - Atomic conditional stock deduction inside session.withTransaction()
- * - Authoritative DB pricing only (never trust req.body.totalAmount)
- * - Automatic rollback via transaction on any failure (no manual compensation loops)
+ * - Authoritative DB pricing only (evaluate product-level discount)
+ * - Coupon validation & calculation inside transaction
+ * - Store immutable historical price & discount snapshot
+ * - Automatic rollback via transaction on any failure
  */
 exports.createOrder = async (req, res) => {
-  const { products } = req.body;
+  const { products, couponCode } = req.body;
 
   // 1. Validate inputs
   if (!Array.isArray(products) || products.length === 0) {
@@ -56,10 +62,13 @@ exports.createOrder = async (req, res) => {
 
   const session = await mongoose.startSession();
   let createdOrder = null;
+  const outOfStockProducts = [];
 
   try {
     await session.withTransaction(async () => {
-      let calculatedTotal = 0;
+      let originalSubtotal = 0;
+      let subtotalAfterProductDiscounts = 0;
+      let productDiscountTotal = 0;
       const validatedProducts = [];
 
       // 3. Process each consolidated product atomically inside the transaction
@@ -86,19 +95,109 @@ exports.createOrder = async (req, res) => {
           throw err;
         }
 
-        // Price is authoritative from database; never accept client financial inputs
-        calculatedTotal += updatedProduct.price * item.quantity;
+        if (updatedProduct.stock === 0) {
+          outOfStockProducts.push({ id: updatedProduct._id, name: updatedProduct.name });
+        }
+
+        // Authoritative product discount calculation from database
+        const discountInfo = calculateProductDiscount(updatedProduct);
+        const itemOriginalPrice = discountInfo.originalPrice;
+        const itemEffectivePrice = discountInfo.effectivePrice;
+        const itemDiscountAmount = discountInfo.discountAmount * item.quantity;
+
+        originalSubtotal += itemOriginalPrice * item.quantity;
+        subtotalAfterProductDiscounts += itemEffectivePrice * item.quantity;
+        productDiscountTotal += itemDiscountAmount;
 
         validatedProducts.push({
           productId: updatedProduct._id,
           name: updatedProduct.name,
-          price: updatedProduct.price,
+          price: itemEffectivePrice,
+          originalPrice: itemOriginalPrice,
+          discountedPrice: itemEffectivePrice,
+          itemDiscount: itemDiscountAmount,
           quantity: item.quantity,
           image: item.image || updatedProduct.image || ""
         });
       }
 
-      // 4. Create the order document inside the active transaction
+      // 4. Validate Coupon (if provided)
+      let couponDiscount = 0;
+      let validatedCouponCode = null;
+
+      if (couponCode && typeof couponCode === "string" && couponCode.trim()) {
+        const cleanCode = couponCode.trim().toUpperCase();
+        const coupon = await Coupon.findOne({ code: cleanCode }).session(session);
+
+        if (!coupon) {
+          const err = new Error(`Coupon code "${cleanCode}" does not exist.`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (!coupon.isActive) {
+          const err = new Error(`Coupon "${cleanCode}" is no longer active.`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        const now = new Date();
+        if (coupon.startDate && new Date(coupon.startDate) > now) {
+          const err = new Error(`Coupon "${cleanCode}" is not active yet.`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (coupon.expirationDate && new Date(coupon.expirationDate) < now) {
+          const err = new Error(`Coupon "${cleanCode}" has expired.`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (coupon.minOrderAmount && subtotalAfterProductDiscounts < coupon.minOrderAmount) {
+          const err = new Error(
+            `Coupon "${cleanCode}" requires a minimum order of ₹${coupon.minOrderAmount.toLocaleString("en-IN")}.`
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (coupon.maxTotalUsage !== null && coupon.usageCount >= coupon.maxTotalUsage) {
+          const err = new Error(`Coupon "${cleanCode}" has reached its maximum usage limit.`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        if (coupon.maxUsagePerCustomer && Array.isArray(coupon.customerUsage)) {
+          const userCount = coupon.customerUsage.filter(
+            (u) => u.userId && u.userId.toString() === req.user.id.toString()
+          ).length;
+
+          if (userCount >= coupon.maxUsagePerCustomer) {
+            const err = new Error(`You have already redeemed coupon "${cleanCode}" the maximum number of times.`);
+            err.statusCode = 400;
+            throw err;
+          }
+        }
+
+        // Calculate coupon discount
+        if (coupon.discountType === "percentage") {
+          couponDiscount = Math.round((subtotalAfterProductDiscounts * coupon.discountValue) / 100);
+          if (coupon.maxDiscountAmount && couponDiscount > coupon.maxDiscountAmount) {
+            couponDiscount = coupon.maxDiscountAmount;
+          }
+        } else if (coupon.discountType === "fixed") {
+          couponDiscount = Math.min(coupon.discountValue, subtotalAfterProductDiscounts);
+        }
+
+        couponDiscount = Math.min(couponDiscount, subtotalAfterProductDiscounts);
+        validatedCouponCode = coupon.code;
+      }
+
+      // Final payable amount (never negative)
+      const calculatedTotal = Math.max(0, subtotalAfterProductDiscounts - couponDiscount);
+
+      // 5. Create the order document with full discount snapshot inside active transaction
       const orders = await Order.create(
         [
           {
@@ -107,6 +206,13 @@ exports.createOrder = async (req, res) => {
             userEmail: req.user.email,
             products: validatedProducts,
             totalAmount: calculatedTotal,
+            discountDetails: {
+              originalSubtotal,
+              productDiscountTotal,
+              couponCode: validatedCouponCode,
+              couponDiscount,
+              deliveryFee: 0
+            },
             status: "Pending",
             paymentStatus: "Pending"
           }
@@ -128,6 +234,34 @@ exports.createOrder = async (req, res) => {
         totalAmount: createdOrder.totalAmount
       };
       io.to("admins").to(`user_${createdOrder.userId}`).emit("orderCreated", payload);
+    }
+
+    // Audit Log: Order Placed
+    await logActivity({
+      action: "ORDER_CREATED",
+      category: "ORDER",
+      actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+      target: { entityType: "Order", entityId: createdOrder._id },
+      status: "SUCCESS",
+      details: {
+        orderId: createdOrder._id,
+        totalAmount: createdOrder.totalAmount,
+        itemCount: createdOrder.products.length,
+        couponCode: createdOrder.discountDetails?.couponCode,
+        couponDiscount: createdOrder.discountDetails?.couponDiscount
+      }
+    });
+
+    // Audit Log: Products that transitioned to Out of Stock
+    for (const p of outOfStockProducts) {
+      await logActivity({
+        action: "PRODUCT_OUT_OF_STOCK",
+        category: "INVENTORY",
+        actor: { userId: req.user.id, email: req.user.email, role: req.user.role },
+        target: { entityType: "Product", entityId: p.id, name: p.name },
+        status: "WARNING",
+        details: { reason: "Depleted after customer purchase", orderId: createdOrder._id }
+      });
     }
 
     return res.status(201).json({
@@ -170,11 +304,6 @@ exports.getAllOrders = async (req, res) => {
 
 /**
  * 4. Update Order Status with Strict Lifecycle Validation & Atomic Cancellation
- * Admin only. Transitions:
- * - Pending -> Processing / Cancelled
- * - Processing -> Shipped / Cancelled
- * - Shipped -> Delivered / Cancelled
- * - Delivered / Cancelled -> Terminal (no further transitions)
  */
 exports.updateOrderStatus = async (req, res) => {
   const { status } = req.body;
@@ -192,9 +321,9 @@ exports.updateOrderStatus = async (req, res) => {
 
   try {
     let updatedOrder = null;
+    let oldStatus = "";
 
     await session.withTransaction(async () => {
-      // Find order inside transaction
       const order = await Order.findById(id).session(session);
       if (!order) {
         const err = new Error("Order not found");
@@ -202,7 +331,8 @@ exports.updateOrderStatus = async (req, res) => {
         throw err;
       }
 
-      // If requested status is same as current status
+      oldStatus = order.status;
+
       if (order.status === status) {
         if (status === "Cancelled") {
           const err = new Error("Order is already cancelled.");
@@ -213,7 +343,6 @@ exports.updateOrderStatus = async (req, res) => {
         return;
       }
 
-      // Check valid lifecycle transition
       const allowedNext = ALLOWED_TRANSITIONS[order.status] || [];
       if (!allowedNext.includes(status)) {
         const err = new Error(
@@ -223,7 +352,6 @@ exports.updateOrderStatus = async (req, res) => {
         throw err;
       }
 
-      // Fulfillment transitions (Processing, Shipped, Delivered) require Paid status
       if (status !== "Cancelled" && order.paymentStatus !== "Paid") {
         const err = new Error(
           "Cannot advance status because payment is still Pending. Customer must complete payment first."
@@ -232,9 +360,7 @@ exports.updateOrderStatus = async (req, res) => {
         throw err;
       }
 
-      // Case 1: Cancellation with atomic inventory restoration
       if (status === "Cancelled") {
-        // Atomic conditional lock: ensures order is not already Cancelled or Delivered
         const lockedOrder = await Order.findOneAndUpdate(
           { _id: id, status: { $in: ["Pending", "Processing", "Shipped"] } },
           { $set: { status: "Cancelled" } },
@@ -260,14 +386,12 @@ exports.updateOrderStatus = async (req, res) => {
 
         updatedOrder = lockedOrder;
       } else {
-        // Case 2: Advancement to Processing, Shipped, or Delivered
         order.status = status;
         await order.save({ session });
         updatedOrder = order;
       }
     });
 
-    // Notify strictly authorized scoped rooms via Socket.io (no broad broadcast)
     const io = req.app.get("io");
     if (io && updatedOrder) {
       const payload = {
@@ -280,6 +404,20 @@ exports.updateOrderStatus = async (req, res) => {
         .to("admins")
         .emit("orderStatusUpdated", payload);
     }
+
+    // Audit Log: Order Status Change
+    await logActivity({
+      action: status === "Cancelled" ? "ORDER_CANCELLED" : "ORDER_STATUS_UPDATED",
+      category: "ORDER",
+      actor: { userId: req.user.id, email: req.user.email, role: req.user.role, ipAddress: req.ip },
+      target: { entityType: "Order", entityId: updatedOrder._id },
+      status: "SUCCESS",
+      details: {
+        previousStatus: oldStatus,
+        newStatus: status,
+        paymentStatus: updatedOrder.paymentStatus
+      }
+    });
 
     return res.json({
       message: "Order status updated successfully",
@@ -296,25 +434,64 @@ exports.updateOrderStatus = async (req, res) => {
 };
 
 /**
- * 5. Admin Dashboard Statistics
+ * 5. Admin Comprehensive Dashboard Statistics
+ * Returns real historical and current figures across Revenue, Orders, Products, Customers, Inventory, and Discounts.
  */
 exports.getAdminStats = async (req, res) => {
   try {
-    const [totalUsers, totalProducts, totalOrders, paidOrders] = await Promise.all([
-      User.countDocuments(),
-      Product.countDocuments(),
-      Order.countDocuments(),
-      Order.find({ paymentStatus: "Paid" }).select("totalAmount")
-    ]);
-
-    // Revenue strictly sums verified Paid orders
-    const totalRevenue = paidOrders.reduce((sum, ord) => sum + (Number(ord.totalAmount) || 0), 0);
-
-    res.json({
+    const [
       totalUsers,
+      totalCustomers,
       totalProducts,
       totalOrders,
-      totalRevenue
+      pendingOrders,
+      paidOrders,
+      outOfStockCount,
+      lowStockCount,
+      activeCouponsCount,
+      activeProductDiscountsCount,
+      recentOrders,
+      recentLogs
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ role: { $ne: "admin" } }),
+      Product.countDocuments(),
+      Order.countDocuments(),
+      Order.countDocuments({ status: "Pending" }),
+      Order.find({ paymentStatus: "Paid" }).select("totalAmount createdAt"),
+      Product.countDocuments({ stock: 0 }),
+      Product.countDocuments({ stock: { $gt: 0, $lte: 5 } }),
+      Coupon.countDocuments({ isActive: true, expirationDate: { $gte: new Date() } }),
+      Product.countDocuments({ "discount.isActive": true }),
+      Order.find().sort({ createdAt: -1 }).limit(6),
+      AuditLog.find().sort({ createdAt: -1 }).limit(6)
+    ]);
+
+    const totalRevenue = paidOrders.reduce((sum, ord) => sum + (Number(ord.totalAmount) || 0), 0);
+    const paidOrdersCount = paidOrders.length;
+    const activeDiscounts = activeCouponsCount + activeProductDiscountsCount;
+
+    // Last 30 days revenue trend calculation from actual timestamps
+    const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentPaid = paidOrders.filter((o) => new Date(o.createdAt) >= last30Days);
+    const recentRevenue = recentPaid.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+    res.json({
+      totalRevenue,
+      totalOrders,
+      totalCustomers: totalCustomers || totalUsers,
+      totalUsers,
+      totalProducts,
+      pendingOrders,
+      paidOrders: paidOrdersCount,
+      outOfStockProducts: outOfStockCount,
+      lowStockProducts: lowStockCount,
+      activeDiscounts,
+      activeCouponsCount,
+      activeProductDiscountsCount,
+      recentRevenue,
+      recentOrders,
+      recentLogs
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -329,36 +506,36 @@ exports.downloadInvoice = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'Invalid order ID format.' });
+      return res.status(400).json({ message: "Invalid order ID format." });
     }
 
     const order = await Order.findById(id);
     if (!order) {
-      return res.status(404).json({ message: 'Order not found.' });
+      return res.status(404).json({ message: "Order not found." });
     }
 
     // Ownership or Admin authorization
     const isOwner = order.userId.toString() === req.user.id;
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin = req.user.role === "admin";
     if (!isOwner && !isAdmin) {
-      return res.status(403).json({ message: 'Access denied. Not your order.' });
+      return res.status(403).json({ message: "Access denied. Not your order." });
     }
 
     // Invoices are strictly restricted to Paid orders
-    if (order.paymentStatus !== 'Paid') {
-      return res.status(400).json({ message: 'Invoice is only available for paid orders.' });
+    if (order.paymentStatus !== "Paid") {
+      return res.status(400).json({ message: "Invoice is only available for paid orders." });
     }
 
-    const user = await User.findById(order.userId).select('name email phone country');
+    const user = await User.findById(order.userId).select("name email phone country");
     const pdfBuffer = await generateInvoicePDF(order, user);
-    const invoiceNum = order.invoiceNumber || ('INV-' + order._id.toString().substring(18, 24).toUpperCase());
+    const invoiceNum = order.invoiceNumber || ("INV-" + order._id.toString().substring(18, 24).toUpperCase());
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="shopiee-invoice-${invoiceNum}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="shopiee-invoice-${invoiceNum}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
     return res.end(pdfBuffer);
   } catch (err) {
-    console.error('[Invoice Download] Error:', err.message);
-    return res.status(500).json({ message: 'Failed to generate invoice PDF.' });
+    console.error("[Invoice Download] Error:", err.message);
+    return res.status(500).json({ message: "Failed to generate invoice PDF." });
   }
 };

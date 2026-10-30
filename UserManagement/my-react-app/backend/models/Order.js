@@ -13,6 +13,19 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       min: [0, "Item price cannot be negative"]
     },
+    originalPrice: {
+      type: Number,
+      min: [0, "Original price cannot be negative"]
+    },
+    discountedPrice: {
+      type: Number,
+      min: [0, "Discounted price cannot be negative"]
+    },
+    itemDiscount: {
+      type: Number,
+      default: 0,
+      min: [0, "Item discount cannot be negative"]
+    },
     quantity: { 
       type: Number, 
       required: true,
@@ -49,6 +62,14 @@ const orderSchema = new mongoose.Schema(
       type: Number, 
       required: true,
       min: [0, "Total amount cannot be negative"]
+    },
+    // Historical discount snapshot: preserves exact figures forever
+    discountDetails: {
+      originalSubtotal: { type: Number, default: 0 },
+      productDiscountTotal: { type: Number, default: 0 },
+      couponCode: { type: String, uppercase: true, trim: true },
+      couponDiscount: { type: Number, default: 0 },
+      deliveryFee: { type: Number, default: 0 }
     },
     status: {
       type: String,
