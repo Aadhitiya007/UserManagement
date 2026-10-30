@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -15,6 +16,18 @@ const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Token Version Invalidation Check
+    const user = await User.findById(decoded.id).select("role tokenVersion");
+    if (!user) {
+      return res.status(401).json({ message: "User account no longer exists." });
+    }
+
+    // If token has a tokenVersion and it does not match user's current tokenVersion, reject it
+    if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== (user.tokenVersion || 0)) {
+      return res.status(401).json({ message: "Session expired due to password reset. Please log in again." });
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

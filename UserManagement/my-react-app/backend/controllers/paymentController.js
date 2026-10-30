@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const { processOrderInvoiceAndEmail } = require("../utils/invoiceService");
 
 /**
  * 1. Get Payment & Fulfillment Status for an Order
@@ -260,6 +261,7 @@ exports.handlePaymentWebhook = async (req, res) => {
           .emit("orderStatusUpdated", payload);
       }
 
+      processOrderInvoiceAndEmail(order._id).catch((err) => console.error("[Webhook] Invoice trigger error:", err.message));
       return res.status(200).json({ received: true, status: "Paid" });
     }
 
@@ -418,3 +420,4 @@ exports.cancelPendingPayment = async (req, res) => {
     await session.endSession();
   }
 };
+

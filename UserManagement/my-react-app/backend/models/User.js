@@ -28,6 +28,21 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String
+    },
+    // Secure Password Reset Fields
+    resetPasswordToken: {
+      type: String,
+      default: null,
+      index: true
+    },
+    resetPasswordExpire: {
+      type: Date,
+      default: null
+    },
+    // Token version for absolute JWT invalidation on password change
+    tokenVersion: {
+      type: Number,
+      default: 0
     }
   },
   { timestamps: true }

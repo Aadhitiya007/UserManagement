@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { io } from "socket.io-client";
 import Navbar from "../components/Navbar";
 import { API_URL } from "../config/api";
-
-const ITEMS_PER_PAGE = 20;
+import { io } from "socket.io-client";
 
 function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  // Search & Pagination States
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   useEffect(() => {
     fetchMyOrders();
@@ -18,32 +20,23 @@ function Orders() {
     const token = localStorage.getItem("token");
     if (!token) return;
 
+    // Listen to real-time order status updates via authenticated WebSocket
     const socket = io(API_URL, {
       auth: { token }
     });
 
-    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-    const userId = storedUser.id || storedUser._id;
-    if (userId) {
-      socket.emit("joinUserRoom", userId);
-    }
-
     socket.on("orderStatusUpdated", (data) => {
-      console.log("Order status updated:", data);
-
-      if (data.cancelled) {
-        setOrders((currentOrders) =>
-          currentOrders.filter((order) => order._id !== data.orderId)
-        );
-        return;
-      }
-
-      setOrders((currentOrders) =>
-        currentOrders.map((order) =>
-          order._id === data.orderId
-            ? { ...order, status: data.status, paymentStatus: data.paymentStatus || order.paymentStatus }
-            : order
-        )
+      setOrders((prevOrders) =>
+        prevOrders.map((order) => {
+          if (order._id === data.orderId) {
+            return {
+              ...order,
+              status: data.status,
+              paymentStatus: data.paymentStatus
+            };
+          }
+          return order;
+        })
       );
     });
 
@@ -71,6 +64,37 @@ function Orders() {
     }
   }
 
+  async function handleDownloadInvoice(orderId, invoiceNumber) {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      setDownloadingId(orderId);
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/invoice`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to download invoice.");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shopiee-invoice-${invoiceNumber || orderId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Invoice download error: ${err.message}`);
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   function getStatusBadge(status) {
     switch (status) {
       case "Delivered": return "badge badge-success";
@@ -83,15 +107,14 @@ function Orders() {
 
   // Search filter by Order ID or Product Name
   const filteredOrders = orders.filter((order) => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return true;
-    return (
-      order._id.toLowerCase().includes(term) ||
-      order.products.some((p) => p.name.toLowerCase().includes(term))
+    const matchId = order._id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchProduct = order.products.some((p) =>
+      p.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    return matchId || matchProduct;
   });
 
-  // Pagination (20 items per page)
+  // Calculate Pagination
   const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE) || 1;
   const paginatedOrders = filteredOrders.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -105,10 +128,10 @@ function Orders() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
           <h2>My Orders</h2>
           {orders.length > 0 && (
-            <div style={{ width: "300px" }}>
+            <div style={{ width: "100%", maxWidth: "300px" }}>
               <input
                 type="text"
-                placeholder="🔍 Search my orders by ID or item..."
+                placeholder="🔍 Search my orders..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -128,7 +151,7 @@ function Orders() {
         )}
 
         {loading ? (
-          <p>Loading orders...</p>
+          <p style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>Loading orders...</p>
         ) : orders.length === 0 ? (
           <div style={{ background: "white", padding: "40px", textAlign: "center", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
             <p style={{ color: "#6b7280" }}>You have not placed any orders yet.</p>
@@ -142,7 +165,7 @@ function Orders() {
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {paginatedOrders.map((order) => (
                 <div key={order._id} style={{ background: "white", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "15px", borderBottom: "1px solid #f1f5f9", paddingBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
                     <div>
                       <span style={{ fontSize: "0.85rem", color: "#6b7280" }}>Order ID: #{order._id}</span>
                       <br />
@@ -150,12 +173,10 @@ function Orders() {
                         Placed on: {new Date(order.createdAt).toLocaleDateString()}
                       </span>
                     </div>
-                    <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                       <span className={getStatusBadge(order.status)}>{order.status}</span>
-                      {" "}
                       <span 
                         style={{
-                          marginLeft: "8px",
                           padding: "4px 8px",
                           borderRadius: "4px",
                           fontSize: "0.8rem",
@@ -178,6 +199,19 @@ function Orders() {
                           ? "Payment Failed" 
                           : "Payment Pending"}
                       </span>
+
+                      {/* Download Invoice Button (Only for Paid Orders) */}
+                      {order.paymentStatus === "Paid" && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadInvoice(order._id, order.invoiceNumber)}
+                          disabled={downloadingId === order._id}
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: "0.8rem", padding: "4px 10px", borderColor: "#2563eb", color: "#2563eb" }}
+                        >
+                          {downloadingId === order._id ? "Downloading..." : "📄 Invoice"}
+                        </button>
+                      )}
                     </div>
                   </div>
 

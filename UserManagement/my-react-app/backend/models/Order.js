@@ -77,7 +77,24 @@ const orderSchema = new mongoose.Schema(
         failureReason: { type: String },
         createdAt: { type: Date, default: Date.now }
       }
-    ]
+    ],
+    // Automated Invoice Metadata & Idempotency tracking
+    invoiceNumber: {
+      type: String,
+      sparse: true,
+      index: true
+    },
+    invoiceGeneratedAt: {
+      type: Date
+    },
+    invoiceEmailSentAt: {
+      type: Date
+    },
+    invoiceEmailStatus: {
+      type: String,
+      enum: ["NotSent", "Sending", "Sent", "Failed"],
+      default: "NotSent"
+    }
   },
   { timestamps: true }
 );

@@ -62,13 +62,12 @@ function Cart() {
       setLoading(false);
     }
   }
-  
 
   return (
     <>
       <Navbar />
       <div className="container">
-        <h2 style={{ marginBottom: "20px" }}>Shopping Cart</h2>
+        <h2 style={{ marginBottom: "20px", fontSize: "1.4rem", fontWeight: 700 }}>Shopping Cart</h2>
 
         {error && (
           <div style={{ padding: "12px", background: "#fee2e2", color: "#991b1b", borderRadius: "6px", marginBottom: "20px" }}>
@@ -77,16 +76,16 @@ function Cart() {
         )}
 
         {cart.length === 0 ? (
-          <div style={{ background: "white", padding: "40px", textAlign: "center", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+          <div style={{ background: "white", padding: "40px 20px", textAlign: "center", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
             <p style={{ fontSize: "1.1rem", color: "#6b7280", marginBottom: "20px" }}>Your cart is empty.</p>
             <Link to="/products" className="btn btn-primary">
               Browse Products
             </Link>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "30px" }}>
-            <div className="table-container">
-              <table>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "24px" }} className="cart-layout-grid">
+            <div className="table-responsive">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Product</th>
@@ -112,7 +111,7 @@ function Cart() {
                                 e.currentTarget.onerror = null;
                                 e.currentTarget.src = "https://via.placeholder.com/60?text=No+Img";
                               }}
-                              style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "4px" }}
+                              style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }}
                             />
                             <span style={{ fontWeight: "500" }}>{item.name}</span>
                           </div>
@@ -123,6 +122,8 @@ function Cart() {
                             <button
                               onClick={() => updateQuantity(id, item.quantity - 1)}
                               className="btn btn-outline btn-sm"
+                              style={{ minWidth: "36px", minHeight: "36px", padding: 0 }}
+                              aria-label="Decrease quantity"
                             >
                               -
                             </button>
@@ -130,6 +131,8 @@ function Cart() {
                             <button
                               onClick={() => updateQuantity(id, item.quantity + 1)}
                               className="btn btn-outline btn-sm"
+                              style={{ minWidth: "36px", minHeight: "36px", padding: 0 }}
+                              aria-label="Increase quantity"
                             >
                               +
                             </button>
@@ -148,8 +151,10 @@ function Cart() {
               </table>
             </div>
 
-            <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #e2e8f0", height: "fit-content" }}>
-              <h3 style={{ marginBottom: "15px", borderBottom: "1px solid #e2e8f0", pb: "10px" }}>Order Summary</h3>
+            <div style={{ background: "white", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0", height: "fit-content" }}>
+              <h3 style={{ marginBottom: "15px", borderBottom: "1px solid #e2e8f0", paddingBottom: "10px", fontSize: "1.1rem" }}>
+                Order Summary
+              </h3>
 
               <div style={{ display: "flex", justifyContent: "space-between", margin: "15px 0", fontSize: "1.2rem", fontWeight: "bold" }}>
                 <span>Total Amount:</span>

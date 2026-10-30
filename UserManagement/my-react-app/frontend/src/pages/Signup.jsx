@@ -145,7 +145,7 @@ function Signup() {
             </div>
 
             {/* Age & Country (Two Column Grid) */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+            <div className="form-row-2">
               <div className="form-group">
                 <label>Age (Must be 18+) *</label>
                 <input
@@ -202,3 +202,4 @@ function Signup() {
 }
 
 export default Signup;
+
