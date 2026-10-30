@@ -2,7 +2,66 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const Coupon = require("../models/Coupon");
 const { processOrderInvoiceAndEmail } = require("../utils/invoiceService");
+const { logActivity } = require("../utils/logger");
+
+/**
+ * Helper to record coupon redemption and audit logs on successful payment
+ */
+async function recordPaymentSuccess(order, attemptId, method, role = "customer") {
+  // 1. If coupon code was applied, count customer usage atomically
+  if (order.discountDetails && order.discountDetails.couponCode) {
+    try {
+      const coupon = await Coupon.findOneAndUpdate(
+        { code: order.discountDetails.couponCode },
+        {
+          $inc: { usageCount: 1 },
+          $push: {
+            customerUsage: {
+              userId: order.userId,
+              userEmail: order.userEmail,
+              orderId: order._id,
+              usedAt: new Date()
+            }
+          }
+        },
+        { returnDocument: "after" }
+      );
+
+      if (coupon) {
+        await logActivity({
+          action: "COUPON_REDEEMED",
+          category: "DISCOUNT",
+          actor: { userId: order.userId, email: order.userEmail, role },
+          target: { entityType: "Coupon", entityId: coupon._id, name: coupon.code },
+          status: "SUCCESS",
+          details: {
+            orderId: order._id,
+            discountAmount: order.discountDetails.couponDiscount,
+            totalUsageNow: coupon.usageCount
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("[Payment] Coupon redemption count warning:", err.message);
+    }
+  }
+
+  // 2. Audit Log: Payment Succeeded
+  await logActivity({
+    action: "PAYMENT_RECEIVED",
+    category: "PAYMENT",
+    actor: { userId: order.userId, email: order.userEmail, role },
+    target: { entityType: "Order", entityId: order._id },
+    status: "SUCCESS",
+    details: {
+      transactionId: attemptId,
+      amount: order.totalAmount,
+      method: method
+    }
+  });
+}
 
 /**
  * 1. Get Payment & Fulfillment Status for an Order
@@ -29,6 +88,7 @@ exports.getOrderPaymentStatus = async (req, res) => {
     res.json({
       orderId: order._id,
       totalAmount: order.totalAmount,
+      discountDetails: order.discountDetails || {},
       status: order.status,
       paymentStatus: order.paymentStatus || "Pending",
       paymentMethod: order.paymentMethod || "Card",
@@ -45,11 +105,6 @@ exports.getOrderPaymentStatus = async (req, res) => {
 /**
  * 2. Simulate Payment Outcome (Development / Testing Only)
  * POST /api/payment/simulate
- * Features:
- * - Strict ownership verification
- * - Rejection of cancelled orders
- * - Idempotent response if order is already paid
- * - Scoped real-time Socket.io notifications (no wide broadcasts)
  */
 exports.simulatePayment = async (req, res) => {
   try {
@@ -91,7 +146,6 @@ exports.simulatePayment = async (req, res) => {
     // Outcome A: Simulated Success
     if (shouldSucceed) {
       order.paymentStatus = "Paid";
-      // Advance fulfillment status from Pending to Processing
       if (order.status === "Pending") {
         order.status = "Processing";
       }
@@ -123,6 +177,9 @@ exports.simulatePayment = async (req, res) => {
           .to("admins")
           .emit("orderStatusUpdated", payload);
       }
+
+      // Record coupon redemption & Audit Log
+      await recordPaymentSuccess(order, attemptId, selectedMethod, req.user.role);
 
       // Asynchronously trigger automated PDF invoice generation & email delivery
       processOrderInvoiceAndEmail(order._id).catch((err) =>
@@ -156,6 +213,19 @@ exports.simulatePayment = async (req, res) => {
 
     await order.save();
 
+    // Audit Log: Payment Failed
+    await logActivity({
+      action: "PAYMENT_FAILED",
+      category: "PAYMENT",
+      actor: { userId: order.userId, email: order.userEmail, role: req.user.role },
+      target: { entityType: "Order", entityId: order._id },
+      status: "FAILURE",
+      details: {
+        attemptId,
+        failureReason
+      }
+    });
+
     const io = req.app.get("io");
     if (io) {
       const payload = {
@@ -183,8 +253,6 @@ exports.simulatePayment = async (req, res) => {
 /**
  * 3. Production Payment Webhook Handler with HMAC-SHA256 Signature Verification
  * POST /api/payment/webhook
- * Headers: x-webhook-signature
- * Body: { event, orderId, transactionId, amount }
  */
 exports.handlePaymentWebhook = async (req, res) => {
   try {
@@ -199,14 +267,12 @@ exports.handlePaymentWebhook = async (req, res) => {
       return res.status(400).json({ message: "Missing webhook signature header." });
     }
 
-    // Payload string for HMAC verification
     const payloadString = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
     const expectedSignature = crypto
       .createHmac("sha256", webhookSecret)
       .update(payloadString)
       .digest("hex");
 
-    // Timing-safe comparison to prevent timing attacks
     const sigBuffer = Buffer.from(signature);
     const expectedBuffer = Buffer.from(expectedSignature);
 
@@ -239,12 +305,13 @@ exports.handlePaymentWebhook = async (req, res) => {
       if (order.status === "Pending") {
         order.status = "Processing";
       }
+      const txnId = transactionId || `TXN_${Date.now()}`;
       order.paymentDetails = {
-        transactionId: transactionId || `TXN_${Date.now()}`,
+        transactionId: txnId,
         paidAt: new Date()
       };
       order.paymentAttempts.push({
-        attemptId: transactionId || `TXN_${Date.now()}`,
+        attemptId: txnId,
         method: "Webhook",
         status: "Success",
         createdAt: new Date()
@@ -266,18 +333,20 @@ exports.handlePaymentWebhook = async (req, res) => {
           .emit("orderStatusUpdated", payload);
       }
 
+      await recordPaymentSuccess(order, txnId, "Webhook", "customer");
       processOrderInvoiceAndEmail(order._id).catch((err) => console.error("[Webhook] Invoice trigger error:", err.message));
       return res.status(200).json({ received: true, status: "Paid" });
     }
 
     if (event === "payment.failed") {
+      const failId = transactionId || `FAIL_${Date.now()}`;
       order.paymentStatus = "Failed";
       order.paymentDetails = {
-        transactionId: transactionId || `FAIL_${Date.now()}`,
+        transactionId: failId,
         failureReason: "Payment failed at gateway"
       };
       order.paymentAttempts.push({
-        attemptId: transactionId || `FAIL_${Date.now()}`,
+        attemptId: failId,
         method: "Webhook",
         status: "Failed",
         failureReason: "Payment failed at gateway",
@@ -285,6 +354,15 @@ exports.handlePaymentWebhook = async (req, res) => {
       });
 
       await order.save();
+
+      await logActivity({
+        action: "PAYMENT_FAILED",
+        category: "PAYMENT",
+        actor: { userId: order.userId, email: order.userEmail, role: "customer" },
+        target: { entityType: "Order", entityId: order._id },
+        status: "FAILURE",
+        details: { failureReason: "Payment failed at gateway", transactionId: failId }
+      });
 
       return res.status(200).json({ received: true, status: "Failed" });
     }
@@ -312,22 +390,18 @@ exports.retryPayment = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Ownership check
     if (order.userId.toString() !== req.user.id && req.user.role !== "admin") {
       return res.status(403).json({ message: "Access denied. Not your order." });
     }
 
-    // Reject retry if order is cancelled
     if (order.status === "Cancelled") {
       return res.status(400).json({ message: "Cannot retry payment for a cancelled order." });
     }
 
-    // Reject retry if order is already paid
     if (order.paymentStatus === "Paid") {
       return res.status(400).json({ message: "Cannot retry an order that is already paid." });
     }
 
-    // Reset status to Pending for retry (preserving existing paymentAttempts history)
     order.paymentStatus = "Pending";
     await order.save();
 
@@ -360,24 +434,21 @@ exports.cancelPendingPayment = async (req, res) => {
     await session.withTransaction(async () => {
       const order = await Order.findById(orderId).session(session);
       if (!order) {
-        return; // Idempotent: already deleted
+        return;
       }
 
-      // Verify ownership
       if (order.userId.toString() !== req.user.id && req.user.role !== "admin") {
         const err = new Error("Access denied. Not your order.");
         err.statusCode = 403;
         throw err;
       }
 
-      // Do not allow cancelling if already Paid
       if (order.paymentStatus === "Paid") {
         const err = new Error("Cannot cancel an order that has already been paid.");
         err.statusCode = 400;
         throw err;
       }
 
-      // Atomic delete ensuring status is still unpaid
       const removed = await Order.findOneAndDelete(
         { _id: orderId, paymentStatus: { $ne: "Paid" } },
         { session }
@@ -425,4 +496,3 @@ exports.cancelPendingPayment = async (req, res) => {
     await session.endSession();
   }
 };
-

@@ -114,16 +114,24 @@ export function CartProvider({ children }) {
   }, [switchUser]);
 
   function addToCart(product, quantity = 1) {
+    const availableStock = typeof product.stock === "number" ? product.stock : Infinity;
+    if (availableStock <= 0) {
+      alert(`"${product.name}" is currently out of stock.`);
+      return;
+    }
+
     setCart((prevCart) => {
       const existing = prevCart.find((item) => (item._id || item.id) === (product._id || product.id));
       if (existing) {
+        const newQty = Math.min(existing.quantity + quantity, availableStock);
         return prevCart.map((item) =>
           (item._id || item.id) === (product._id || product.id)
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: newQty, stock: availableStock }
             : item
         );
       }
-      return [...prevCart, { ...product, quantity }];
+      const initialQty = Math.min(quantity, availableStock);
+      return [...prevCart, { ...product, quantity: initialQty, stock: availableStock }];
     });
   }
 
@@ -133,9 +141,13 @@ export function CartProvider({ children }) {
       return;
     }
     setCart((prevCart) =>
-      prevCart.map((item) =>
-        (item._id || item.id) === productId ? { ...item, quantity } : item
-      )
+      prevCart.map((item) => {
+        if ((item._id || item.id) === productId) {
+          const maxStock = typeof item.stock === "number" ? item.stock : Infinity;
+          return { ...item, quantity: Math.min(quantity, maxStock) };
+        }
+        return item;
+      })
     );
   }
 

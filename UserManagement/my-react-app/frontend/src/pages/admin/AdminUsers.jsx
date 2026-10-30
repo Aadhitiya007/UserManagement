@@ -122,111 +122,137 @@ function AdminUsers() {
       <div className="admin-layout">
         <AdminSidebar />
         <main className="admin-content">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "15px" }}>
-            <h2>User Account Management</h2>
-            
-            <input
-              type="text"
-              className="form-control"
-              placeholder="🔍 Search users by name, email, role, phone, country..."
-              style={{ width: "360px" }}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {error && (
-            <div style={{ padding: "12px", background: "#fee2e2", color: "#991b1b", borderRadius: "6px", marginBottom: "20px" }}>
-              {error}
-            </div>
-          )}
-
-          {loading ? (
-            <p>Loading users...</p>
-          ) : users.length === 0 ? (
-            <p>No matching users found.</p>
-          ) : (
-            <>
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Phone / Country</th>
-                      <th>Joined Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedUsers.map((u) => (
-                      <tr key={u._id}>
-                        <td style={{ fontWeight: "500" }}>{u.name}</td>
-                        <td>{u.email}</td>
-                        <td>
-                          <span className={u.role === "admin" ? "badge badge-info" : "badge badge-success"}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: "0.88rem", color: "#475569" }}>
-                          {u.phone ? `${u.phone} (${u.country || "N/A"})` : u.country || "N/A"}
-                        </td>
-                        <td style={{ fontSize: "0.85rem", color: "#6b7280" }}>
-                          {new Date(u.createdAt).toLocaleDateString()}
-                        </td>
-                        <td>
-                          <div style={{ display: "flex", gap: "8px" }}>
-                            <button
-                              onClick={() => handleOpenEditModal(u)}
-                              className="btn btn-outline btn-sm"
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(u._id, u.name)}
-                              className="btn btn-danger btn-sm"
-                            >
-                              🗑️ Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="admin-dashboard-container">
+            <div className="admin-dashboard-header">
+              <div>
+                <h1 style={{ fontSize: "1.6rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>
+                  User Account Management
+                </h1>
+                <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "0.92rem" }}>
+                  Oversee registered customer profiles, administrative roles, contact details, and account security
+                </p>
               </div>
 
-              {/* Pagination Controls at Bottom (20 per page) */}
-              {totalPages > 1 && (
-                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", marginTop: "24px" }}>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="btn btn-outline btn-sm"
-                    style={{ padding: "6px 14px" }}
-                  >
-                    ← Previous
-                  </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="🔍 Search by name, email, role, phone, or country..."
+                  style={{ width: "350px", maxWidth: "100%", fontSize: "0.9rem" }}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+            </div>
 
-                  <span style={{ fontSize: "0.9rem", color: "#475569" }}>
-                    Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
-                  </span>
+            {error && (
+              <div style={{ padding: "14px 18px", background: "#fee2e2", color: "#991b1b", borderRadius: "8px", marginBottom: "20px" }}>
+                {error}
+              </div>
+            )}
 
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="btn btn-outline btn-sm"
-                    style={{ padding: "6px 14px" }}
-                  >
-                    Next →
-                  </button>
+            {/* User Accounts Table Card */}
+            <div className="admin-card">
+              <div className="admin-card-header">
+                <h3>👥 Registered User Accounts ({users.length})</h3>
+                <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                  Showing {users.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}–
+                  {Math.min(currentPage * ITEMS_PER_PAGE, users.length)} of {users.length}
+                </span>
+              </div>
+
+              {loading ? (
+                <p style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>Loading users...</p>
+              ) : users.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <p style={{ color: "#64748b" }}>No matching users found.</p>
                 </div>
+              ) : (
+                <>
+                  <div className="table-responsive">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Email</th>
+                          <th>Role</th>
+                          <th>Phone / Country</th>
+                          <th>Joined Date</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedUsers.map((u) => (
+                          <tr key={u._id}>
+                            <td style={{ fontWeight: "600", color: "#0f172a" }}>{u.name}</td>
+                            <td style={{ color: "#334155" }}>{u.email}</td>
+                            <td>
+                              <span className={u.role === "admin" ? "badge badge-info" : "badge badge-success"}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: "0.88rem", color: "#475569" }}>
+                              {u.phone ? `${u.phone} (${u.country || "N/A"})` : u.country || "N/A"}
+                            </td>
+                            <td style={{ fontSize: "0.85rem", color: "#64748b", whiteSpace: "nowrap" }}>
+                              {new Date(u.createdAt).toLocaleDateString()}
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                  onClick={() => handleOpenEditModal(u)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ padding: "4px 10px" }}
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(u._id, u.name)}
+                                  className="btn btn-danger btn-sm"
+                                  style={{ padding: "4px 10px" }}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Controls at Bottom (20 per page) */}
+                  {totalPages > 1 && (
+                    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", marginTop: "24px" }}>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: "6px 14px" }}
+                      >
+                        ← Previous
+                      </button>
+
+                      <span style={{ fontSize: "0.9rem", color: "#475569" }}>
+                        Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: "6px 14px" }}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
+            </div>
+          </div>
 
           {editingUser && (
             <div className="modal-backdrop" onClick={() => setEditingUser(null)}>

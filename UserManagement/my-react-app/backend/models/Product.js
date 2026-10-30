@@ -57,6 +57,26 @@ const productSchema = new mongoose.Schema(
         message: "Stock quantity must be an integer"
       }
     },
+    lowStockThreshold: {
+      type: Number,
+      default: 5,
+      min: [0, "Low stock threshold cannot be negative"]
+    },
+    discount: {
+      discountType: {
+        type: String,
+        enum: ["percentage", "fixed"],
+        default: "percentage"
+      },
+      value: {
+        type: Number,
+        default: 0,
+        min: [0, "Discount value cannot be negative"]
+      },
+      startDate: { type: Date },
+      endDate: { type: Date },
+      isActive: { type: Boolean, default: false }
+    },
     image: {
       type: String,
       default: ""
@@ -87,5 +107,6 @@ const productSchema = new mongoose.Schema(
 
 productSchema.index({ category: 1 });
 productSchema.index({ price: 1 });
+productSchema.index({ stock: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

@@ -108,7 +108,7 @@ function ProductDetail() {
       <>
         <Navbar />
         <div className="container">
-          <p>Loading product details...</p>
+          <p style={{ textAlign: "center", padding: "60px 0", color: "#64748b" }}>Loading product details...</p>
         </div>
       </>
     );
@@ -119,35 +119,34 @@ function ProductDetail() {
       <>
         <Navbar />
         <div className="container">
-          <p style={{ color: "red" }}>{error || "Product not found"}</p>
+          <p style={{ color: "#ef4444", padding: "40px 0", textAlign: "center" }}>{error || "Product not found"}</p>
         </div>
       </>
     );
   }
 
   const imageUrl = product.imageUrl || product.image || "https://via.placeholder.com/400x300?text=No+Image";
+  const isOutOfStock = Number(product.stock) <= 0;
+  const isLowStock = !isOutOfStock && Number(product.stock) <= (product.lowStockThreshold || 5);
 
-  const isOutOfStock = product.stock <= 0;
-
-  // Dynamic pricing calculations
-  const originalMRP = product.mrp || Math.round(product.price * 1.3);
-  const discountPercent = originalMRP > product.price 
-    ? Math.round(((originalMRP - product.price) / originalMRP) * 100) 
-    : 0;
+  const hasProductDiscount = Boolean(product.isDiscountActive && product.discountAmount > 0);
+  const effectivePrice = product.effectivePrice !== undefined ? product.effectivePrice : product.price;
+  const originalMRP = product.mrp || Math.round(product.price * 1.25);
 
   const reviewsList = product.reviews || [];
   const avgRating = product.rating || (reviewsList.length > 0 ? (reviewsList.reduce((acc, r) => acc + r.rating, 0) / reviewsList.length).toFixed(1) : 4.5);
   const totalReviews = product.reviewsCount || reviewsList.length;
   const warranty = product.warranty || "1 Year Manufacturer Warranty";
 
-  // Throttled Add to Cart: prevents spam-clicking and replaces annoying alert with smooth feedback
   const handleAddToCart = throttle(() => {
+    if (isOutOfStock) return;
     addToCart(product, quantity);
     setAddedFeedback(true);
     setTimeout(() => setAddedFeedback(false), 1800);
   }, 800);
 
   async function handleBuyNow() {
+    if (isOutOfStock) return;
     const token = localStorage.getItem("token");
     if (!token) {
       alert("Please login to purchase items directly.");
@@ -167,12 +166,11 @@ function ProductDetail() {
             {
               productId: product._id || product.id,
               name: product.name,
-              price: product.price,
+              price: effectivePrice,
               quantity: quantity,
               image: product.image || ""
             }
-          ],
-          totalAmount: product.price * quantity
+          ]
         })
       });
       const data = await res.json();
@@ -198,15 +196,36 @@ function ProductDetail() {
         <div className="product-detail-grid">
           {/* Left Column: Image & Product Specifications */}
           <div>
-            <img
-              src={imageUrl}
-              alt={product.name}
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = "https://via.placeholder.com/400x300?text=No+Image";
-              }}
-              style={{ width: "100%", maxHeight: "380px", objectFit: "cover", borderRadius: "8px" }}
-            />
+            <div style={{ position: "relative", borderRadius: "8px", overflow: "hidden", background: "#f8fafc" }}>
+              <img
+                src={imageUrl}
+                alt={product.name}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "https://via.placeholder.com/400x300?text=No+Image";
+                }}
+                style={{
+                  width: "100%",
+                  maxHeight: "380px",
+                  objectFit: "cover",
+                  filter: isOutOfStock ? "grayscale(40%)" : "none"
+                }}
+              />
+              {isOutOfStock && (
+                <div style={{ position: "absolute", top: "16px", left: "16px" }}>
+                  <span className="stock-badge-out" style={{ fontSize: "0.85rem", padding: "6px 12px" }}>
+                    ● OUT OF STOCK
+                  </span>
+                </div>
+              )}
+              {hasProductDiscount && !isOutOfStock && (
+                <div style={{ position: "absolute", top: "16px", right: "16px" }}>
+                  <span className="sale-badge" style={{ fontSize: "0.85rem", padding: "4px 10px" }}>
+                    SALE - {product.discountPercent}% OFF
+                  </span>
+                </div>
+              )}
+            </div>
 
             <div className="specs-container">
               <h3 className="specs-title">Product Specifications</h3>
@@ -219,6 +238,18 @@ function ProductDetail() {
                   <tr>
                     <td className="spec-key">Category</td>
                     <td className="spec-val">{product.category}</td>
+                  </tr>
+                  <tr>
+                    <td className="spec-key">Inventory Status</td>
+                    <td className="spec-val">
+                      {isOutOfStock ? (
+                        <span className="stock-badge-out">Out of Stock</span>
+                      ) : isLowStock ? (
+                        <span className="stock-badge-low">Low Stock ({product.stock} available)</span>
+                      ) : (
+                        <span className="stock-badge-in">In Stock ({product.stock} units)</span>
+                      )}
+                    </td>
                   </tr>
                   <tr>
                     <td className="spec-key">Warranty</td>
@@ -245,21 +276,52 @@ function ProductDetail() {
             </div>
 
             {/* Pricing Breakdown */}
-            <div className="price-container">
-              <span className="selling-price">₹{product.price}</span>
-              {discountPercent > 0 && (
-                <>
-                  <span className="mrp-price">₹{originalMRP}</span>
-                  <span className="discount-badge">{discountPercent}% off</span>
-                </>
+            <div className="price-container" style={{ margin: "14px 0" }}>
+              {hasProductDiscount ? (
+                <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+                  <span className="selling-price" style={{ fontSize: "1.9rem", color: "#0f172a", fontWeight: 800 }}>
+                    ₹{effectivePrice.toLocaleString("en-IN")}
+                  </span>
+                  <span className="strikethrough-price" style={{ fontSize: "1.1rem" }}>
+                    ₹{product.price.toLocaleString("en-IN")}
+                  </span>
+                  <span className="discount-pill" style={{ fontSize: "0.88rem", padding: "4px 8px" }}>
+                    {product.discountPercent}% OFF
+                  </span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                  <span className="selling-price" style={{ fontSize: "1.9rem", color: "#0f172a", fontWeight: 800 }}>
+                    ₹{product.price.toLocaleString("en-IN")}
+                  </span>
+                  {originalMRP > product.price && (
+                    <>
+                      <span className="strikethrough-price">₹{originalMRP.toLocaleString("en-IN")}</span>
+                      <span className="discount-badge">
+                        {Math.round(((originalMRP - product.price) / originalMRP) * 100)}% off
+                      </span>
+                    </>
+                  )}
+                </div>
               )}
             </div>
 
-            {isOutOfStock && (
-              <div style={{ marginBottom: "20px" }}>
-                <span className="badge badge-danger">Out of Stock</span>
-              </div>
-            )}
+            {/* Stock Availability Badge */}
+            <div style={{ marginBottom: "20px" }}>
+              {isOutOfStock ? (
+                <div style={{ padding: "10px 14px", background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: "6px", color: "#b91c1c", fontWeight: 600 }}>
+                  ⚠️ This product is currently OUT OF STOCK and cannot be ordered right now.
+                </div>
+              ) : isLowStock ? (
+                <div style={{ padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "6px", color: "#b45309", fontWeight: 600 }}>
+                  ⚡ Only {product.stock} left in stock - order soon!
+                </div>
+              ) : (
+                <div style={{ color: "#16a34a", fontWeight: 600, fontSize: "0.95rem" }}>
+                  ✓ In Stock ({product.stock} units available)
+                </div>
+              )}
+            </div>
 
             <p style={{ color: "#4b5563", marginBottom: "20px", lineHeight: "1.7" }}>
               {product.description || "No description provided."}
@@ -281,56 +343,75 @@ function ProductDetail() {
               </div>
             </div>
 
+            {/* Quantity Selector: Clamped to available stock */}
             {!isOutOfStock && (
               <div style={{ display: "flex", alignItems: "center", gap: "15px", marginBottom: "20px" }}>
-                <label style={{ fontWeight: "500" }}>Quantity:</label>
+                <label style={{ fontWeight: "600", color: "#334155" }}>Quantity:</label>
                 <input
                   type="number"
                   min="1"
                   max={product.stock}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Math.min(product.stock, Number(e.target.value))))}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10) || 1;
+                    setQuantity(Math.max(1, Math.min(product.stock, val)));
+                  }}
                   className="form-control"
-                  style={{ width: "80px" }}
+                  style={{ width: "90px", fontWeight: "bold" }}
                 />
+                <span style={{ fontSize: "0.85rem", color: "#64748b" }}>Max available: {product.stock}</span>
               </div>
             )}
 
             {/* Action Buttons */}
-            <div style={{ display: "flex", gap: "12px", marginTop: "15px" }}>
-              <button
-                onClick={handleAddToCart}
-                disabled={isOutOfStock}
-                className={`btn ${addedFeedback ? "btn-success" : "btn-outline"}`}
-                style={{
-                  flex: 1,
-                  padding: "12px",
-                  transition: "all 0.25s ease",
-                  background: addedFeedback ? "#16a34a" : "",
-                  color: addedFeedback ? "#ffffff" : "",
-                  borderColor: addedFeedback ? "#16a34a" : ""
-                }}
-              >
-                {addedFeedback ? "✓ Added to Cart!" : "🛒 Add to Cart"}
-              </button>
+            {isOutOfStock ? (
+              <div style={{ marginTop: "15px" }}>
+                <button
+                  type="button"
+                  disabled
+                  className="btn btn-out-of-stock"
+                  style={{ width: "100%", padding: "14px", fontSize: "1rem" }}
+                  aria-disabled="true"
+                >
+                  Out of Stock - Currently Unavailable
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "12px", marginTop: "15px" }}>
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className={`btn ${addedFeedback ? "btn-success" : "btn-outline"}`}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    transition: "all 0.25s ease",
+                    background: addedFeedback ? "#16a34a" : "",
+                    color: addedFeedback ? "#ffffff" : "",
+                    borderColor: addedFeedback ? "#16a34a" : ""
+                  }}
+                >
+                  {addedFeedback ? "✓ Added to Cart!" : "🛒 Add to Cart"}
+                </button>
 
-              <button
-                onClick={handleBuyNow}
-                disabled={isOutOfStock || buying}
-                className="btn btn-primary"
-                style={{ flex: 1, padding: "12px", background: "#f59e0b", borderColor: "#d97706", color: "#000", fontWeight: "bold" }}
-              >
-                {buying ? "Processing..." : "⚡ Buy Now"}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={buying}
+                  className="btn btn-primary"
+                  style={{ flex: 1, padding: "12px", background: "#f59e0b", borderColor: "#d97706", color: "#000", fontWeight: "bold" }}
+                >
+                  {buying ? "Processing..." : "⚡ Buy Now"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Dynamic Reviews & Ratings Section */}
+        {/* Customer Reviews Section */}
         <div className="reviews-section">
           <h2 style={{ marginBottom: "16px", color: "#1e293b" }}>Customer Ratings & Reviews</h2>
 
-          {/* Review Submission Form (Only for Verified Buyers) */}
           <div style={{ background: "#f8fafc", padding: "20px", borderRadius: "8px", marginBottom: "30px", border: "1px solid #e2e8f0" }}>
             {canReview ? (
               <form onSubmit={handleSubmitReview}>
@@ -345,7 +426,6 @@ function ProductDetail() {
                   </div>
                 )}
 
-                {/* Star Rating Picker */}
                 <div style={{ margin: "12px 0" }}>
                   <label style={{ fontWeight: "500", fontSize: "0.9rem" }}>Select Rating:</label>
                   <div className="star-rating-input">
@@ -387,7 +467,6 @@ function ProductDetail() {
             )}
           </div>
 
-          {/* All Customer Reviews List (Publicly Visible to Everyone) */}
           <div>
             <h3 style={{ fontSize: "1.1rem", marginBottom: "16px", color: "#334155" }}>
               All Reviews ({reviewsList.length})
@@ -429,4 +508,3 @@ function ProductDetail() {
 }
 
 export default ProductDetail;
-

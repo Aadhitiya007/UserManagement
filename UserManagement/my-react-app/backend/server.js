@@ -29,6 +29,8 @@ const userRoutes = require("./routes/userRoutes");
 const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const couponRoutes = require("./routes/couponRoutes");
+const auditLogRoutes = require("./routes/auditLogRoutes");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -104,7 +106,6 @@ io.use((socket, next) => {
     return next(new Error("Authentication error: Invalid or expired token."));
   }
 });
-
 
 io.on("connection", (socket) => {
   // Scoped room for specific user notifications - authorized only for that user or an admin
@@ -198,11 +199,14 @@ app.get("/api/health", (req, res) => {
   res.status(isDbConnected ? 200 : 503).json(healthData);
 });
 
+// Primary API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/coupons", couponRoutes);
+app.use("/api/admin/logs", auditLogRoutes);
 
 app.use((err, req, res, next) => {
   console.error("Server Error:", err.message || err);
@@ -233,6 +237,3 @@ if (require.main === module) {
 }
 
 module.exports = { app, server, io };
-module.exports = { app, server, io };
-
-

@@ -1,9 +1,11 @@
 const nodemailer = require("nodemailer");
+const { logActivity } = require("./logger");
 
 /**
  * Reusable, production-grade email delivery service.
  * Supports production SMTP via environment variables and falls back to Ethereal in development.
  * Safely accepts optional email attachments (e.g. PDF invoices).
+ * Automatically logs email success/failure events to the centralized AuditLog.
  */
 async function sendEmail({ to, subject, html, text, attachments = [] }) {
   const isProduction = process.env.NODE_ENV === "production";
@@ -52,14 +54,47 @@ async function sendEmail({ to, subject, html, text, attachments = [] }) {
     attachments
   };
 
-  const info = await transporter.sendMail(mailOptions);
+  try {
+    const info = await transporter.sendMail(mailOptions);
 
-  // Only log preview URLs in local development when using Ethereal
-  if (!isProduction && nodemailer.getTestMessageUrl(info)) {
-    console.log(`[Email Service] Ethereal Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+    // Non-blocking Audit Log recording
+    logActivity({
+      action: "EMAIL_SENT",
+      category: "EMAIL",
+      actor: { email: fromAddress, role: "system" },
+      target: { entityType: "Email", name: to },
+      status: "SUCCESS",
+      details: {
+        to,
+        subject,
+        messageId: info.messageId,
+        attachmentCount: Array.isArray(attachments) ? attachments.length : 0
+      }
+    }).catch(() => {});
+
+    // Only log preview URLs in local development when using Ethereal
+    if (!isProduction && nodemailer.getTestMessageUrl(info)) {
+      console.log(`[Email Service] Ethereal Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+    }
+
+    return info;
+  } catch (err) {
+    // Non-blocking Audit Log recording
+    logActivity({
+      action: "EMAIL_FAILED",
+      category: "EMAIL",
+      actor: { email: fromAddress, role: "system" },
+      target: { entityType: "Email", name: to },
+      status: "FAILURE",
+      details: {
+        to,
+        subject,
+        error: err.message
+      }
+    }).catch(() => {});
+
+    throw err;
   }
-
-  return info;
 }
 
 module.exports = sendEmail;

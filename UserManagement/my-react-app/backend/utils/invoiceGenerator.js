@@ -2,7 +2,8 @@ const PDFDocument = require("pdfkit");
 
 /**
  * Generates an in-memory PDF invoice Buffer for a verified paid order.
- * Handles clean multi-page pagination, professional branding, product line items, and totals.
+ * Handles clean multi-page pagination, professional branding, product line items,
+ * discount breakdowns (product & coupon), and totals.
  *
  * @param {Object} order - Full order document from MongoDB
  * @param {Object} user - User document containing phone, country, etc. (optional)
@@ -166,7 +167,7 @@ function generateInvoicePDF(order, user = null) {
 
       items.forEach((item, index) => {
         // Page break check if near bottom margin
-        if (currentY > 700) {
+        if (currentY > 670) {
           doc.addPage();
           currentY = 50;
         }
@@ -198,31 +199,57 @@ function generateInvoicePDF(order, user = null) {
       });
 
       // ----------------------------------------------------
-      // 4. Financial Summary Breakdown
+      // 4. Financial Summary Breakdown with Discounts
       // ----------------------------------------------------
       currentY += 10;
-      if (currentY > 680) {
+      if (currentY > 640) {
         doc.addPage();
         currentY = 50;
       }
 
       const totalAmount = Number(order.totalAmount) || 0;
-      // Authoritative subtotal calculation
-      const subtotal = items.reduce((acc, it) => acc + (Number(it.price) || 0) * (it.quantity || 1), 0);
-      const deliveryFee = 0; // Standard free delivery
+      const originalSubtotal =
+        order.discountDetails?.originalSubtotal ||
+        items.reduce((acc, it) => acc + (Number(it.originalPrice || it.price) || 0) * (it.quantity || 1), 0);
+      const productDiscount = order.discountDetails?.productDiscountTotal || 0;
+      const couponDiscount = order.discountDetails?.couponDiscount || 0;
+      const couponCode = order.discountDetails?.couponCode;
 
+      // Subtotal Line
       doc
         .font("Helvetica")
         .fontSize(9)
         .fillColor(lightGray)
-        .text("Subtotal:", 350, currentY)
+        .text("Original Subtotal:", 320, currentY)
         .fillColor(textColor)
-        .text(`Rs. ${subtotal.toLocaleString("en-IN")}`, 450, currentY, { align: "right" });
+        .text(`Rs. ${originalSubtotal.toLocaleString("en-IN")}`, 450, currentY, { align: "right" });
 
-      currentY += 16;
+      currentY += 15;
+
+      // Product Discounts Line (if any)
+      if (productDiscount > 0) {
+        doc
+          .fillColor(lightGray)
+          .text("Product Discounts:", 320, currentY)
+          .fillColor("#16a34a")
+          .text(`-Rs. ${productDiscount.toLocaleString("en-IN")}`, 450, currentY, { align: "right" });
+        currentY += 15;
+      }
+
+      // Coupon Discount Line (if any)
+      if (couponDiscount > 0) {
+        doc
+          .fillColor(lightGray)
+          .text(`Coupon (${couponCode || "PROMO"}):`, 320, currentY)
+          .fillColor("#16a34a")
+          .text(`-Rs. ${couponDiscount.toLocaleString("en-IN")}`, 450, currentY, { align: "right" });
+        currentY += 15;
+      }
+
+      // Shipping line
       doc
         .fillColor(lightGray)
-        .text("Shipping / Delivery:", 350, currentY)
+        .text("Shipping / Delivery:", 320, currentY)
         .fillColor("#16a34a")
         .text("FREE", 450, currentY, { align: "right" });
 
@@ -230,17 +257,17 @@ function generateInvoicePDF(order, user = null) {
 
       // Grand Total Box
       doc
-        .rect(340, currentY, 205, 30)
+        .rect(320, currentY, 225, 32)
         .fill("#f1f5f9");
 
       doc
         .font("Helvetica-Bold")
         .fontSize(11)
         .fillColor(textColor)
-        .text("Total Paid:", 350, currentY + 8)
+        .text("Total Paid:", 332, currentY + 9)
         .fillColor(primaryColor)
         .fontSize(12)
-        .text(`Rs. ${totalAmount.toLocaleString("en-IN")}`, 440, currentY + 7, { align: "right" });
+        .text(`Rs. ${totalAmount.toLocaleString("en-IN")}`, 440, currentY + 8, { align: "right" });
 
       // ----------------------------------------------------
       // 5. Footer & Legal Terms
@@ -277,4 +304,3 @@ function generateInvoicePDF(order, user = null) {
 }
 
 module.exports = { generateInvoicePDF };
-
