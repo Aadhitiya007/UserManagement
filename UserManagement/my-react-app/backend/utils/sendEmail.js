@@ -12,21 +12,35 @@ async function sendEmail({ to, subject, html, text, attachments = [] }) {
   let transporter;
 
   if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    const port = parseInt(process.env.EMAIL_PORT, 10) || 587;
+    const cleanPass = process.env.EMAIL_PASS.replace(/\s+/g, "").trim();
+    const cleanUser = process.env.EMAIL_USER.trim();
+    const isGmail = process.env.EMAIL_HOST.toLowerCase().includes("gmail");
+    const port = parseInt(process.env.EMAIL_PORT, 10) || (isGmail ? 465 : 587);
     const isSecure = port === 465;
 
-    transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: port,
-      secure: isSecure,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: isProduction
-      }
-    });
+    if (isGmail) {
+      // Use Nodemailer's built-in Gmail service to bypass cloud port-blocking & STARTTLS issues on Render
+      transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: cleanUser,
+          pass: cleanPass
+        }
+      });
+    } else {
+      transporter = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST,
+        port: port,
+        secure: isSecure,
+        auth: {
+          user: cleanUser,
+          pass: cleanPass
+        },
+        tls: {
+          rejectUnauthorized: isProduction
+        }
+      });
+    }
   } else if (!isProduction) {
     // Development fallback: automatic Ethereal test account
     const testAccount = await nodemailer.createTestAccount();
@@ -43,7 +57,16 @@ async function sendEmail({ to, subject, html, text, attachments = [] }) {
     throw new Error("Production email configuration missing: EMAIL_HOST, EMAIL_USER, and EMAIL_PASS are required.");
   }
 
-  const fromAddress = process.env.EMAIL_FROM || `"Shopiee Orders" <no-reply@shopiee.com>`;
+  // Ensure valid RFC 5322 format: "Name" <email@example.com>
+  let fromAddress = (process.env.EMAIL_FROM || "").trim();
+  if (!fromAddress) {
+    fromAddress = `"Shopiee Security" <${process.env.EMAIL_USER || "no-reply@shopiee.com"}>`;
+  } else if (!fromAddress.includes("<") && fromAddress.includes("@")) {
+    const parts = fromAddress.split(/\s+/);
+    const emailPart = parts.pop().replace(/[<>]/g, "");
+    const namePart = parts.join(" ").replace(/["']/g, "").trim();
+    fromAddress = namePart ? `"${namePart}" <${emailPart}>` : emailPart;
+  }
 
   const mailOptions = {
     from: fromAddress,
