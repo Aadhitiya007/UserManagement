@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CartProvider } from "./context/CartContext";
+import { WishlistProvider } from "./context/WishlistContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import Products from "./pages/Products";
@@ -53,7 +54,8 @@ function App() {
   return (
     <BrowserRouter>
       <CartProvider>
-        <Routes>
+        <WishlistProvider>
+          <Routes>
           {/* Public Storefront Routes */}
           <Route path="/" element={<Navigate to="/products" replace />} />
           <Route path="/products" element={<Products />} />
@@ -179,6 +181,7 @@ function App() {
           {/* Catch-all fallback */}
           <Route path="*" element={<Navigate to="/products" replace />} />
         </Routes>
+        </WishlistProvider>
       </CartProvider>
     </BrowserRouter>
   );
